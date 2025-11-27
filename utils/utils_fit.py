@@ -1,0 +1,195 @@
+import os
+from threading import local
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+from tqdm import tqdm
+
+from .utils import get_lr
+from .focal_loss import FocalLoss, ClassBalancedFocalLoss
+from .early_stopping import EarlyStopping, ModelCheckpoint, ClassBalancedMetrics
+
+
+def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None):
+    """
+    新增参数:
+        num_classes: 类别数量(从train_trimm.py传入)
+        class_names: 类别名称列表
+        samples_per_class: 各类别样本数量
+        minority_idx: 少数类别索引
+    """
+    # 动态参数验证
+    if samples_per_class is None or num_classes is None:
+        raise ValueError("必须传入 num_classes 和 samples_per_class 参数!")
+    if class_names is None:
+        class_names = [f'Class_{i}' for i in range(num_classes)]
+    if minority_idx is None:
+        minority_idx = num_classes - 1  # 默认最后一个类别
+    total_loss      = 0
+    total_accuracy  = 0
+
+    val_loss        = 0
+    val_accuracy    = 0
+
+    # 使用ClassBalancedFocalLoss处理类别不平衡(动态参数)
+    criterion = ClassBalancedFocalLoss(
+        beta=0.9999,
+        gamma=3.0,
+        samples_per_class=samples_per_class
+    )
+
+    # 初始化类别平衡指标跟踪(动态参数)
+    train_metrics = ClassBalancedMetrics(num_classes=num_classes,
+                                         class_names=class_names,
+                                         minority_class=minority_idx)
+    val_metrics = ClassBalancedMetrics(num_classes=num_classes,
+                                       class_names=class_names,
+                                       minority_class=minority_idx)
+    
+    if local_rank == 0:
+        print('Start Train')
+        pbar = tqdm(total=epoch_step,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
+    model_train.train()
+    for iteration, batch in enumerate(gen):
+        if iteration >= epoch_step: 
+            break
+        images, targets = batch
+        with torch.no_grad():
+            if cuda:
+                images  = images.cuda(local_rank)
+                targets = targets.cuda(local_rank)
+                
+        #----------------------#
+        #   清零梯度
+        #----------------------#
+        optimizer.zero_grad()
+        if not fp16:
+            #----------------------#
+            #   前向传播
+            #----------------------#
+            outputs     = model_train(images)
+            #----------------------#
+            #   计算损失
+            #----------------------#
+            loss_value  = criterion(outputs, targets)
+            loss_value.backward()
+            optimizer.step()
+        else:
+            from torch.cuda.amp import autocast
+            with autocast():
+                #----------------------#
+                #   前向传播
+                #----------------------#
+                outputs     = model_train(images)
+                #----------------------#
+                #   计算损失
+                #----------------------#
+                loss_value  = criterion(outputs, targets)
+            #----------------------#
+            #   反向传播
+            #----------------------#
+            scaler.scale(loss_value).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+        total_loss += loss_value.item()
+        with torch.no_grad():
+            predictions = torch.argmax(F.softmax(outputs, dim=-1), dim=-1)
+            accuracy = torch.mean((predictions == targets).type(torch.FloatTensor))
+            total_accuracy += accuracy.item()
+            
+            # 更新训练指标
+            train_metrics.update(predictions, targets)
+
+        if local_rank == 0:
+            pbar.set_postfix(**{'total_loss': total_loss / (iteration + 1), 
+                                'accuracy'  : total_accuracy / (iteration + 1), 
+                                'lr'        : get_lr(optimizer)})
+            pbar.update(1)
+
+    if local_rank == 0:
+        pbar.close()
+        print('Finish Train')
+        print('Start Validation')
+        pbar = tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
+    model_train.eval()
+    for iteration, batch in enumerate(gen_val):
+        if iteration >= epoch_step_val:
+            break
+        images, targets = batch
+        with torch.no_grad():
+            if cuda:
+                images  = images.cuda(local_rank)
+                targets = targets.cuda(local_rank)
+
+            optimizer.zero_grad()
+
+            outputs     = model_train(images)
+            loss_value  = criterion(outputs, targets)
+            
+            val_loss    += loss_value.item()
+            predictions = torch.argmax(F.softmax(outputs, dim=-1), dim=-1)
+            accuracy    = torch.mean((predictions == targets).type(torch.FloatTensor))
+            val_accuracy += accuracy.item()
+            
+            # 更新验证指标
+            val_metrics.update(predictions, targets)
+            
+        if local_rank == 0:
+            pbar.set_postfix(**{'total_loss': val_loss / (iteration + 1),
+                                'accuracy'  : val_accuracy / (iteration + 1), 
+                                'lr'        : get_lr(optimizer)})
+            pbar.update(1)
+                
+    if local_rank == 0:
+        pbar.close()
+        print('Finish Validation')
+        loss_history.append_loss(epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)
+        loss_history.append_acc(epoch + 1, total_accuracy / epoch_step, val_accuracy / epoch_step_val)
+        # 计算详细指标
+        train_detailed = train_metrics.compute()
+        val_detailed = val_metrics.compute()
+        
+        print('Epoch:' + str(epoch + 1) + '/' + str(Epoch))
+        print('Total Loss: %.3f || Val Loss: %.3f ' % (total_loss / epoch_step, val_loss / epoch_step_val))
+
+        # 动态构建类别准确率输出
+        acc_str = "类别准确率 - " + ", ".join([f"{name}: {val_detailed.get(f'{name}_acc', 0):.3f}" for name in class_names])
+        print(acc_str)
+
+        # 动态输出少数类别复合分数
+        print(f"平衡准确率: {val_detailed.get('balanced_accuracy', 0):.3f}, "
+              f"少数类别({class_names[minority_idx]})复合分数: {val_metrics.get_minority_score():.3f}")
+
+        #-----------------------------------------------#
+        #   早停和模型保存策略
+        #-----------------------------------------------#
+        current_val_loss = val_loss / epoch_step_val
+        minority_score = val_metrics.get_minority_score()
+        
+        # 检查早停
+        if early_stopping is not None:
+            if early_stopping(minority_score, model, epoch):
+                print("早停触发！")
+                return True  # 返回True表示应该停止训练
+        
+        # 模型检查点(使用动态少数类别索引)
+        if model_checkpoint is not None:
+            minority_acc_key = f'{class_names[minority_idx]}_acc'
+            model_checkpoint(minority_score, model, optimizer, epoch,
+                           val_loss=current_val_loss,
+                           minority_acc=val_detailed.get(minority_acc_key, 0),
+                           balanced_acc=val_detailed.get('balanced_accuracy', 0))
+        
+        # 原有的保存逻辑
+        if (epoch + 1) % save_period == 0 or epoch + 1 == Epoch:
+            torch.save(model.state_dict(), os.path.join(save_dir, "ep%03d-loss%.3f-val_loss%.3f.pth" % (epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)))
+
+        if len(loss_history.val_loss) <= 1 or (val_loss / epoch_step_val) <= min(loss_history.val_loss):
+            print('Save best model to best_epoch_weights.pth')
+            torch.save(model.state_dict(), os.path.join(save_dir, "best_epoch_weights.pth"))
+            
+        torch.save(model.state_dict(), os.path.join(save_dir, "last_epoch_weights.pth"))
+        
+    return False  # 返回False表示继续训练

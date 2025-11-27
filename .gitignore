@@ -21,7 +21,7 @@ docs/
 # ============================================
 # 评估输出目录（所有内容）
 # ============================================
-metrics_out/
+metrics_out/*
 
 # ============================================
 # 预训练模型权重（仅.pth文件）
@@ -38,9 +38,9 @@ models/*
 # ============================================
 # 保留 datasets/train/ 和 datasets/test/ 空目录
 # 排除所有图片文件
-datasets/train/*/
-datasets/test/*/
-datasets/val*/
+datasets/train/*
+datasets/test/*
+datasets/val*
 
 # 如果有其他数据目录也排除
 datasets/*.jpg

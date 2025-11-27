@@ -1,0 +1,21 @@
+scipy==1.2.1
+numpy==1.17.0
+matplotlib==3.1.2
+opencv_python==4.1.2.30
+torch==1.2.0
+torchvision==0.4.0
+tqdm==4.60.0
+Pillow==8.2.0
+h5py==2.10.0
+
+# 新增依赖（用于增强评估功能）
+# 注意：如果使用Python 3.11+环境，需要使用兼容版本
+# 对于Python 3.6-3.7环境（原始环境），使用以下版本：
+# scikit-learn==0.21.3
+# pandas==0.25.3
+# seaborn==0.9.0
+
+# 对于Python 3.11+环境（当前环境），使用以下版本：
+scikit-learn>=1.0.0
+pandas>=2.0.0
+seaborn>=0.13.0
