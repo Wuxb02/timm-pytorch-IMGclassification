@@ -4,7 +4,7 @@ import timm
 import torch
 from torch import nn
 
-from nets import get_model_from_name
+# from nets import get_model_from_name  # 已改用timm库，不再需要
 from utils.utils import (cvtColor, get_classes, letterbox_image,
                          preprocess_input, show_config)
 
