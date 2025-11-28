@@ -25,7 +25,6 @@
 - [详细文档](#-详细文档)
 - [评估指标](#-评估指标)
 - [常见问题](#-常见问题)
-- [更新日志](#-更新日志)
 - [许可证](#-许可证)
 
 ---
@@ -125,7 +124,7 @@ python txt_annotation.py
 
 ### 3. 配置模型参数
 
-编辑 `train.py` 或 `train_trimm.py` 中的关键参数:
+编辑  `train_trimm.py` 中的关键参数:
 
 ```python
 # 模型选择
@@ -142,10 +141,7 @@ batch_size = 32
 ### 4. 开始训练
 
 ```bash
-# 标准训练
-python train.py
-
-# 使用timm模型库训练(推荐)
+# 使用timm模型库训练
 python train_trimm.py
 
 # 多GPU训练(Linux)
@@ -235,7 +231,6 @@ classification-pytorch/
 │   ├── utils_metrics.py  # 评估指标
 │   ├── callbacks.py      # 回调函数
 │   └── early_stopping.py # 早停和检查点
-├── train.py              # 标准训练脚本
 ├── train_trimm.py        # timm模型训练脚本
 ├── eval.py               # 模型评估脚本
 ├── predict.py            # 单张图片推理
