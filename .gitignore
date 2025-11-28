@@ -40,7 +40,7 @@ models/*
 # 排除所有图片文件
 datasets/train/*
 datasets/test/*
-datasets/val*
+datasets/val/*
 
 # 如果有其他数据目录也排除
 datasets/*.jpg
