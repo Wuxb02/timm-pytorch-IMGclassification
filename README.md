@@ -217,6 +217,40 @@ UnFreeze_Epoch = 200              # 解冻训练轮数
 Freeze_batch_size = 16            # 冻结阶段批次大小
 Unfreeze_batch_size = 8           # 解冻阶段批次大小
 fp16 = True                       # 混合精度训练
+
+# 损失函数配置 (可选4种)
+loss_type = "cb_focal"            # 损失函数类型
+focal_gamma = 2.0                 # Focal Loss聚焦参数
+cb_focal_beta = 0.9999            # 类别平衡参数
+label_smoothing = 0.1             # 标签平滑系数
+```
+
+**损失函数选择指南**:
+
+| 损失函数类型 | 适用场景 | 参数说明 |
+|------------|---------|---------|
+| `'ce'` | 类别平衡数据 | 标准交叉熵损失 |
+| `'focal'` | 有困难样本 | gamma越大越关注困难样本 |
+| `'cb_focal'` | **类别不平衡** ✅ | beta越接近1平衡效果越强 |
+| `'label_smoothing'` | 减少过拟合 | smoothing通常取0.1 |
+
+**使用示例**:
+```python
+# 示例1: 类别不平衡数据（推荐）
+loss_type = "cb_focal"
+focal_gamma = 2.0
+cb_focal_beta = 0.9999
+
+# 示例2: 类别平衡数据
+loss_type = "ce"
+
+# 示例3: 标准Focal Loss
+loss_type = "focal"
+focal_gamma = 2.0
+
+# 示例4: 标签平滑（提升泛化）
+loss_type = "label_smoothing"
+label_smoothing = 0.1
 ```
 
 **训练输出文件** (`.pth`文件说明):

@@ -108,11 +108,11 @@ if __name__ == "__main__":
     # ----------------------------------------------------#
     #   classes_path
     # ----------------------------------------------------#
-    classes_path = 'model_data/cls_classes.txt'
+    classes_path = './model_data/cls_classes.txt'
     # ----------------------------------------------------#
     #   输入的图片大小
     # ----------------------------------------------------#
-    input_shape = [224, 224]
+    input_shape = [299, 299]
     # ------------------------------------------------------#
     #   所用模型种类 (请使用timm支持的模型名称)
     #   例如: 'resnet50', 'efficientnet_b0', 'vit_base_patch16_224',
@@ -150,18 +150,39 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.001    # 提高最小学习率，保持持续学习
-    optimizer_type = "sgd"
+    optimizer_type = "adam"
     momentum = 0.9
     weight_decay = 1e-4        # 添加权重衰减，防止过拟合
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
-    num_workers = 4            # 减少并行线程，避免数据加载冲突
+    num_workers = 12            # 减少并行线程，避免数据加载冲突
     
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
     use_weighted_sampler = True  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
+
+    # ------------------------------------------------------#
+    #   损失函数配置 (Loss Function Selection)
+    # ------------------------------------------------------#
+    # 可选损失函数:
+    #   - 'ce':                  标准交叉熵损失 (CrossEntropyLoss) - 适合类别平衡数据
+    #   - 'focal':               Focal Loss - 专注于困难样本
+    #   - 'cb_focal':            类别平衡Focal Loss - 推荐用于类别不平衡 ✅
+    #   - 'label_smoothing':     标签平滑交叉熵 - 减少过拟合,提升泛化能力
+    # ------------------------------------------------------#
+    loss_type = "focal"  # 默认使用类别平衡Focal Loss
+
+    # Focal Loss 参数 (loss_type为'focal'或'cb_focal'时生效)
+    focal_alpha = None       # 类别权重,None表示自动计算
+    focal_gamma = 2.0        # 聚焦参数,越大越关注困难样本
+
+    # 类别平衡Focal Loss 参数 (loss_type为'cb_focal'时生效)
+    cb_focal_beta = 0.9999   # 重采样参数,越接近1类别平衡效果越强
+
+    # 标签平滑参数 (loss_type为'label_smoothing'时生效)
+    label_smoothing = 0.1    # 平滑系数,通常取0.1
 
     # ------------------------------------------------------#
     #   数据集路径
@@ -185,15 +206,6 @@ if __name__ == "__main__":
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         local_rank = 0
         rank = 0
-
-    # timm会自动处理权重下载，这里的download_weights可以跳过或注释掉
-    # if pretrained:
-    #     if distributed:
-    #         if local_rank == 0:
-    #             download_weights(backbone)
-    #         dist.barrier()
-    #     else:
-    #         download_weights(backbone)
 
     # ------------------------------------------------------#
     #   获取classes
@@ -278,6 +290,23 @@ if __name__ == "__main__":
         print(f"各类别样本数量: {samples_per_class}")
         print(f"少数类别: 索引{minority_idx}, 占比{minority_ratio:.1%}")
 
+    # ------------------------------------------------------#
+    #   创建损失函数 (根据配置)
+    # ------------------------------------------------------#
+    from utils.focal_loss import get_loss_function
+
+    criterion = get_loss_function(
+        loss_type=loss_type,
+        num_classes=num_classes,
+        samples_per_class=samples_per_class,
+        focal_alpha=focal_alpha,
+        focal_gamma=focal_gamma,
+        cb_focal_beta=cb_focal_beta,
+        label_smoothing=label_smoothing
+    )
+    if local_rank == 0:
+        print("=" * 80)
+
     if local_rank == 0:
         show_config(
             num_classes=num_classes, backbone=backbone, model_path=model_path, input_shape=input_shape, \
@@ -336,7 +365,6 @@ if __name__ == "__main__":
         if epoch_step == 0 or epoch_step_val == 0:
             raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
 
-        # SMOTE智能过采样策略：对类别2进行图像合成增强
         train_dataset = DataGenerator(train_lines, input_shape, random=True, autoaugment_flag=True)
         val_dataset = DataGenerator(val_lines, input_shape, random=False, autoaugment_flag=False)
 
@@ -434,14 +462,15 @@ if __name__ == "__main__":
             #   !!! 核心修改：适配 inception_v3 (timm名称) !!!
             #   timm 的 inception_v3 也能与 fit_one_epoch_incep 配合工作，无需修改此处的逻辑
             # ------------------------------------------------------------------------------------------#
-            # 使用带有早停功能的训练循环(传入动态参数)
+            # 使用带有早停功能的训练循环(传入动态参数 + 损失函数)
             if backbone == "inception_v3":
                 should_stop = fit_one_epoch_incep(
                     model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
                     gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
                     early_stopping=early_stopping, model_checkpoint=model_checkpoint,
                     num_classes=num_classes, class_names=class_names,
-                    samples_per_class=samples_per_class, minority_idx=minority_idx
+                    samples_per_class=samples_per_class, minority_idx=minority_idx,
+                    criterion=criterion
                 )
             else:
                 should_stop = fit_one_epoch(
@@ -449,7 +478,8 @@ if __name__ == "__main__":
                     gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
                     early_stopping=early_stopping, model_checkpoint=model_checkpoint,
                     num_classes=num_classes, class_names=class_names,
-                    samples_per_class=samples_per_class, minority_idx=minority_idx
+                    samples_per_class=samples_per_class, minority_idx=minority_idx,
+                    criterion=criterion
                 )
             
             # 检查是否应该早停

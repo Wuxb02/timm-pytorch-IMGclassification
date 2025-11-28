@@ -7,17 +7,18 @@ from torch import nn
 from tqdm import tqdm
 
 from .utils import get_lr
-from .focal_loss import FocalLoss, ClassBalancedFocalLoss
+from .focal_loss import FocalLoss, ClassBalancedFocalLoss, get_loss_function
 from .early_stopping import EarlyStopping, ModelCheckpoint, ClassBalancedMetrics
 
 
-def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None):
+def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None, criterion=None):
     """
     新增参数:
         num_classes: 类别数量(从train_trimm.py传入)
         class_names: 类别名称列表
         samples_per_class: 各类别样本数量
         minority_idx: 少数类别索引
+        criterion: 损失函数实例(从train_trimm.py传入,推荐方式)
     """
     # 动态参数验证
     if samples_per_class is None or num_classes is None:
@@ -32,12 +33,14 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
     val_loss        = 0
     val_accuracy    = 0
 
-    # 使用ClassBalancedFocalLoss处理类别不平衡(动态参数)
-    criterion = ClassBalancedFocalLoss(
-        beta=0.9999,
-        gamma=3.0,
-        samples_per_class=samples_per_class
-    )
+    # 损失函数处理：优先使用传入的criterion，否则使用默认的ClassBalancedFocalLoss
+    if criterion is None:
+        print("[Warning] 未传入损失函数，使用默认的ClassBalancedFocalLoss")
+        criterion = ClassBalancedFocalLoss(
+            beta=0.9999,
+            gamma=3.0,
+            samples_per_class=samples_per_class
+        )
 
     # 初始化类别平衡指标跟踪(动态参数)
     train_metrics = ClassBalancedMetrics(num_classes=num_classes,

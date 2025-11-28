@@ -47,8 +47,7 @@ class TranslateY(object):
 
 
 class Rotate(object):
-    # from https://stackoverflow.com/questions/
-    # 5252170/specify-image-filling-color-when-rotating-in-python-with-pil-and-setting-expand
+
     def __call__(self, x, magnitude):
         rot = x.convert("RGBA").rotate(magnitude * random.choice([-1, 1]))
         return Image.composite(rot, Image.new("RGBA", rot.size, (128,) * 4), rot).convert(x.mode)
