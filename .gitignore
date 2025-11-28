@@ -36,19 +36,18 @@ models/*
 # ============================================
 # 数据集目录（仅图片文件，保留目录结构）
 # ============================================
-# 保留 datasets/train/ 和 datasets/test/ 空目录
-# 排除所有图片文件
-datasets/train/*
-datasets/test/*
-datasets/val/*
+# 排除所有图片文件，但保留子目录结构
+datasets/**/*.jpg
+datasets/**/*.jpeg
+datasets/**/*.png
+datasets/**/*.JPG
+datasets/**/*.JPEG
+datasets/**/*.PNG
+datasets/**/*.bmp
+datasets/**/*.gif
 
-# 如果有其他数据目录也排除
-datasets/*.jpg
-datasets/*.jpeg
-datasets/*.png
-datasets/*.JPG
-datasets/*.JPEG
-datasets/*.PNG
+# 保留 .gitkeep 文件以维持空目录
+!datasets/**/.gitkeep
 cls_test.txt
 cls_train.txt
 # ============================================
