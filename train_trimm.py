@@ -460,14 +460,10 @@ if __name__ == "__main__":
         if local_rank == 0:
             loss_history.writer.close()
 
-            # 训练结束后自动评估
+            # 训练完成提示
             print("\n" + "=" * 80)
-            print("训练完成，开始自动评估...")
+            print("训练完成!")
             print("=" * 80)
-
-            try:
-                import subprocess
-                subprocess.run(["D:\\anaconda\\python.exe", "eval.py"], check=True)
-            except Exception as e:
-                print(f"自动评估失败: {e}")
-                print("请手动运行: D:\\anaconda\\python.exe eval.py")
+            print("\n如需评估模型性能，请手动运行:")
+            print('  Windows: "D:\\anaconda\\python.exe" eval.py')
+            print('  Linux:   python eval.py')

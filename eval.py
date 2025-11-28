@@ -2,6 +2,7 @@ import os
 import warnings
 warnings.filterwarnings("ignore")
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
 from classification import (Classification, cvtColor, letterbox_image,
@@ -53,11 +54,22 @@ class Eval_Classification(Classification):
         return preds
 
 if __name__ == "__main__":
+    classfication = Eval_Classification()
+
+    # 提取模型名称和数据集名称
+    model_name = classfication.backbone
+    dataset_name = os.path.splitext(os.path.basename(test_annotation_path))[0]
+
+    # 构建动态输出文件夹名称
+    output_folder_name = f"{model_name}_{dataset_name}"
+    base_metrics_path = metrics_out_path
+    metrics_out_path = os.path.join(base_metrics_path, output_folder_name)
+
     if not os.path.exists(metrics_out_path):
         os.makedirs(metrics_out_path)
-            
-    classfication = Eval_Classification()
-    
+
+    print(f"\n评估结果将保存至: {metrics_out_path}")
+
     with open(f"./{test_annotation_path}","r",encoding='UTF-8-sig') as f:
         lines = f.readlines()
     top1, top5, Recall, Precision = evaluteTop1_5(classfication, lines, metrics_out_path)
@@ -147,6 +159,7 @@ if __name__ == "__main__":
     preds_list = []
     labels_list = []
     probs_list = []  # 新增：收集完整概率向量
+    detailed_results = []  # 新增：存储每个样本的详细信息
 
     for index, line in enumerate(lines):
         annotation_path = line.split(';')[1].split('\n')[0]
@@ -160,6 +173,24 @@ if __name__ == "__main__":
         labels_list.append(y)
         probs_list.append(pred)  # 保存完整概率
 
+        # 新增：记录详细结果
+        result_dict = {
+            'path': annotation_path,
+            'true': y,
+            'predict': pred_1,
+        }
+
+        # 动态生成概率列名
+        for class_idx, class_name in enumerate(class_names):
+            # 判断是否为纯数字（旧格式cls_classes.txt）
+            if class_name.isdigit():
+                col_name = f'class_{class_idx}_prob'
+            else:
+                col_name = f'{class_name}_probability'
+            result_dict[col_name] = pred[class_idx]
+
+        detailed_results.append(result_dict)
+
         if index % 100 == 0:
             print(f"  进度: [{index+1}/{len(lines)}]")
 
@@ -167,6 +198,12 @@ if __name__ == "__main__":
     labels = np.array(labels_list)
     preds = np.array(preds_list)
     probs = np.array(probs_list)
+
+    # 保存详细预测结果为CSV
+    detailed_df = pd.DataFrame(detailed_results)
+    csv_path = os.path.join(metrics_out_path, "detailed_predictions.csv")
+    detailed_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+    print(f"\n✓ 详细预测结果已保存: {csv_path}")
 
     # 计算混淆矩阵
     hist = fast_hist(labels, preds, len(class_names))
@@ -279,18 +316,20 @@ if __name__ == "__main__":
     print("=" * 80)
 
     print(f"\n生成的文件列表:")
-    print(f"  1. 基础指标图表:")
+    print(f"  1. 详细预测结果:")
+    print(f"     - {csv_path}")
+    print(f"  2. 基础指标图表:")
     print(f"     - {os.path.join(metrics_out_path, 'Recall.png')}")
     print(f"     - {os.path.join(metrics_out_path, 'Precision.png')}")
     print(f"     - {os.path.join(metrics_out_path, 'confusion_matrix.csv')}")
-    print(f"  2. 详细可视化:")
+    print(f"  3. 详细可视化:")
     print(f"     - {os.path.join(metrics_out_path, 'confusion_matrix_detailed.png')}")
     print(f"     - {os.path.join(metrics_out_path, 'metrics_comparison_chart.png')}")
-    print(f"  3. 高级可视化:")
+    print(f"  4. 高级可视化:")
     print(f"     - {roc_path}")
     print(f"     - {pr_path}")
     print(f"     - {ci_path}")
-    print(f"  4. 性能报告:")
+    print(f"  5. 性能报告:")
     print(f"     - {os.path.join(metrics_out_path, 'classification_report.txt')}")
 
     print(f"\n关键发现:")

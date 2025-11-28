@@ -219,6 +219,8 @@ fp16 = True                       # 混合精度训练
 ### 4. 模型评估
 
 ```bash
+# 重要说明：训练完成后需要手动运行评估（不再自动调用）
+
 # Windows环境
 "D:\anaconda\python.exe" eval.py
 
@@ -226,14 +228,29 @@ fp16 = True                       # 混合精度训练
 python eval.py
 ```
 
+**评估结果保存位置**:
+- 输出文件夹: `metrics_out/{模型名称}_{数据集名称}/`
+- 示例: `metrics_out/inception_resnet_v2_cls_test/`
+
 **评估输出**:
+- **详细预测结果**: `detailed_predictions.csv` - 每个样本的预测标签和所有类别概率
 - **终端输出**: Top-1/Top-5准确率、Precision、Recall、F1、AUC、Specificity、Sensitivity
 - **可视化文件**:
-  - `metrics_out/roc_curves.png` - ROC曲线(含Macro/Micro平均)
-  - `metrics_out/pr_curves.png` - PR曲线
-  - `metrics_out/confidence_intervals.png` - Bootstrap 95%置信区间
-  - `metrics_out/confusion_matrix_detailed.png` - 详细混淆矩阵
-  - `metrics_out/classification_report.txt` - 完整分类报告
+  - `roc_curves.png` - ROC曲线(含Macro/Micro平均)
+  - `pr_curves.png` - PR曲线
+  - `confidence_intervals.png` - Bootstrap 95%置信区间
+  - `confusion_matrix_detailed.png` - 详细混淆矩阵
+  - `classification_report.txt` - 完整分类报告
+
+**CSV详细预测结果示例**:
+```csv
+图片路径,真实标签,预测标签,normal_probability,abnormal_probability
+datasets/test/0/img001.jpg,0,0,0.9234,0.0766
+datasets/test/1/img002.jpg,1,1,0.1234,0.8766
+datasets/test/0/img003.jpg,0,1,0.4521,0.5479
+```
+- 列名根据`model_data/cls_classes.txt`格式自动适配
+- 使用UTF-8-BOM编码，中文路径兼容Excel
 
 ### 5. 模型预测
 
@@ -395,6 +412,7 @@ Micro AUC      0.9801   0.9645   0.9923   ±0.70%
 
 | 文件名 | 说明 | 用途 |
 |--------|------|------|
+| `detailed_predictions.csv` | **【新增】每个样本的详细预测** | 错误分析/数据审查 |
 | `confusion_matrix.csv` | 混淆矩阵(CSV格式) | 数据分析 |
 | `confusion_matrix_detailed.png` | 混淆矩阵可视化 | 论文/报告 |
 | `roc_curves.png` | ROC曲线(含Macro/Micro) | 模型性能对比 |
@@ -404,6 +422,15 @@ Micro AUC      0.9801   0.9645   0.9923   ±0.70%
 | `Precision.png` | 各类别精确率柱状图 | 快速查看 |
 | `metrics_comparison_chart.png` | 指标对比雷达图 | 综合评估 |
 | `classification_report.txt` | 完整文本报告 | 归档记录 |
+
+**detailed_predictions.csv详细说明**:
+- **列结构**: 图片路径、真实标签、预测标签、每个类别的概率值
+- **列名格式**: 根据`cls_classes.txt`自动适配（有类别名用类别名，无类别名用索引）
+- **应用场景**:
+  - 分析预测错误的样本
+  - 找出置信度低的预测
+  - 审查边界样本（概率接近0.5）
+  - 导出到Excel进行进一步分析
 
 ## ⚙️ 高级配置
 
@@ -613,12 +640,14 @@ tensorboard --logdir=runs
 
 ## 📝 更新日志
 
-### 2025-11-28: 文档系统化更新
-- ✅ 创建完整README.md文档
-- ✅ 修正CLAUDE.md中的脚本命名不一致问题
-- ✅ 统一类别术语,明确2分类示例场景
-- ✅ 添加完整的模型支持列表和选择指南
-- ✅ 补充高级配置和常见问题解答
+### 2025-11-28: 评估系统改进与文档更新
+- ✅ **评估流程优化**: 移除训练后自动评估，改为手动运行
+- ✅ **动态输出文件夹**: 评估结果按`{模型名称}_{数据集名称}`组织
+- ✅ **详细预测结果**: 新增`detailed_predictions.csv`，包含每个样本的预测标签和概率
+- ✅ **列名智能适配**: 根据`cls_classes.txt`格式自动选择列名风格
+- ✅ **文档系统化**: 创建完整README.md，修正CLAUDE.md命名不一致问题
+- ✅ **模型支持列表**: 添加15+模型的详细说明和选择指南
+- ✅ **常见问题解答**: 补充8个高频问题的解决方案
 
 ### 2025-11-27: 完整评估系统与框架泛化
 - ✅ 添加AUC指标(Per-class + Macro + Micro)
