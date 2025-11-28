@@ -49,8 +49,8 @@ datasets/*.png
 datasets/*.JPG
 datasets/*.JPEG
 datasets/*.PNG
-cls_*.txt
-
+cls_test.txt
+cls_train.txt
 # ============================================
 # Python 标准缓存和构建文件
 # ============================================
