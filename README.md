@@ -83,8 +83,7 @@ classification-pytorch-cls2/
 │   ├── compare_models_auc.py      # 双模型统计比较工具
 │   ├── evaluate_calibration.py    # 模型校准评估工具
 │   └── README.md                  # 工具使用文档
-├── requirements.txt               # 依赖清单
-└── CLAUDE.md                      # 项目开发指南
+└── requirements.txt               # 依赖清单
 
 ```
 
