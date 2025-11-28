@@ -344,9 +344,65 @@ input_shape = [224, 224]      # 调整输入尺寸(根据模型要求)
 
 ### 高级评估工具 (tools/)
 
-框架提供两个专业评估工具,位于`tools/`目录:
+框架提供三个专业评估工具,位于`tools/`目录:
 
-#### 1. 双模型统计比较 (`compare_models_auc.py`)
+#### 1. GRAD-CAM++可解释性热图 (`visualize_gradcam.py`) ⭐ **新增**
+
+**功能说明**: 生成GRAD-CAM++热图,可视化模型决策依据,帮助理解模型关注的图像区域。
+
+**Python API使用**:
+
+```python
+from tools.visualize_gradcam import generate_gradcam, generate_gradcam_batch
+
+# 单张图片处理
+result = generate_gradcam(
+    image_path='datasets/test/1/sample.jpg',
+    model_path='models/inception_resnet_v2/best_epoch_weights.pth',
+    backbone='inception_resnet_v2',
+    output_path='cam_output/sample_gradcam.jpg',
+    alpha=0.5,  # 热图透明度
+    cuda=True
+)
+
+print(f"预测类别: {result['pred_name']}")
+print(f"置信度: {result['confidence']:.3f}")
+print(f"热图已保存: {result['output_path']}")
+
+# 批量处理
+results = generate_gradcam_batch(
+    image_dir='datasets/test/1/',
+    output_dir='cam_output/batch_analysis',
+    save_report=True  # 生成CSV报告
+)
+
+print(f"批量处理完成,共{len(results)}张图片")
+```
+
+**快速开始**:
+
+```python
+from tools.visualize_gradcam import quick_gradcam
+
+# 使用默认配置快速生成热图
+result = quick_gradcam('test.jpg', 'test_gradcam.jpg')
+```
+
+**支持的模型架构**:
+- ✅ CNN架构: InceptionResNetV2, ResNet系列, VGG系列, DenseNet系列, MobileNetV2, EfficientNet系列
+- ❌ Transformer架构: ViT, Swin Transformer (需要使用Attention Map方法)
+
+**输出示例**:
+- 单张处理: `cam_output/sample_gradcam.jpg` (热图叠加原图,JET颜色映射)
+- 批量处理: `cam_output/batch_xxx/` 文件夹 + `gradcam_report.csv` 报告
+
+**技术特点**:
+- 使用GRAD-CAM++算法(相比GRAD-CAM更精确的权重计算)
+- 自动目标层检测,无需手动指定
+- GPU/CPU自动适配
+- 批量处理带进度条
+
+#### 2. 双模型统计比较 (`compare_models_auc.py`)
 - **功能**: 使用配对Bootstrap方法比较两个模型的性能差异
 - **支持指标**: Macro/Micro AUC、Accuracy、Precision、Recall、F1
 - **输出**: 置信区间、p值、效应量、专业可视化

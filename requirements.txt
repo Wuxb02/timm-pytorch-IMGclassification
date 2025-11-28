@@ -1,10 +1,10 @@
 scipy==1.2.1
 numpy==1.17.0
 matplotlib==3.1.2
-opencv_python==4.1.2.30
+opencv_python>=4.5.0  # 更新版本以支持GRAD-CAM++热图可视化
 torch==1.2.0
 torchvision==0.4.0
-tqdm==4.60.0
+tqdm>=4.60.0  # 用于批量处理进度条
 Pillow==8.2.0
 h5py==2.10.0
 
