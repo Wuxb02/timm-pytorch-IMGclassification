@@ -140,16 +140,16 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     Init_Epoch = 0
     Freeze_Epoch = 30          # 增加冻结轮数，稳定特征提取器训练
-    Freeze_batch_size = 16      # 降低batch size，增加更新频率
+    Freeze_batch_size = 128      # 降低batch size，增加更新频率
     UnFreeze_Epoch = 200       # 适中训练轮数，配合早停机制
-    Unfreeze_batch_size = 8    # 更小的batch size，有利于类别2的学习
+    Unfreeze_batch_size = 64    # 更小的batch size，有利于类别2的学习
     Freeze_Train = True
 
     # ------------------------------------------------------------------#
     #   优化后的训练参数 - 适合小样本不平衡分类任务
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
-    Min_lr = Init_lr * 0.001    # 提高最小学习率，保持持续学习
+    Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
     optimizer_type = "adam"
     momentum = 0.9
     weight_decay = 1e-4        # 添加权重衰减，防止过拟合
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     focal_gamma = 2.0        # 聚焦参数,越大越关注困难样本
 
     # 类别平衡Focal Loss 参数 (loss_type为'cb_focal'时生效)
-    cb_focal_beta = 0.9999   # 重采样参数,越接近1类别平衡效果越强
+    cb_focal_beta = 0.9   # 重采样参数,越接近1类别平衡效果越强
 
     # 标签平滑参数 (loss_type为'label_smoothing'时生效)
     label_smoothing = 0.1    # 平滑系数,通常取0.1
@@ -251,9 +251,9 @@ if __name__ == "__main__":
         loss_history = None
 
     if fp16:
-        from torch.cuda.amp import GradScaler as GradScaler
+        from torch.amp import GradScaler as GradScaler
 
-        scaler = GradScaler()
+        scaler = GradScaler('cuda')
     else:
         scaler = None
 

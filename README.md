@@ -293,6 +293,7 @@ ep050-loss0.157-val_loss0.296.pth
 # Linux/macOS环境
 python eval.py
 ```
+**首先需要要在classification.py中对所需要评估的模型进行配置**
 
 **评估结果保存位置**:
 - 输出文件夹: `metrics_out/{模型名称}_{数据集名称}/`
