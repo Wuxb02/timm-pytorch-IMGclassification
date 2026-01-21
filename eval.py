@@ -40,7 +40,12 @@ class Eval_Classification(Classification):
         #---------------------------------------------------------#
         #   归一化+添加上batch_size维度+转置
         #---------------------------------------------------------#
-        image_data  = np.transpose(np.expand_dims(preprocess_input(np.array(image_data, np.float32)), 0), (0, 3, 1, 2))
+        image_data = np.transpose(
+            np.expand_dims(
+                preprocess_input(np.array(image_data, np.float32), self.backbone), 0
+            ),
+            (0, 3, 1, 2)
+        )
 
         with torch.no_grad():
             photo   = torch.from_numpy(image_data).type(torch.FloatTensor)

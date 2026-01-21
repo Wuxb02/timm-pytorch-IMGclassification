@@ -21,7 +21,6 @@ from utils.utils import (download_weights, get_classes, get_lr_scheduler,
                          set_optimizer_lr, show_config, weights_init,
                          count_samples_per_class, identify_minority_class)
 from utils.utils_fit import fit_one_epoch
-from utils.utils_fit_incep import fit_one_epoch_incep
 from utils.early_stopping import EarlyStopping, ModelCheckpoint
 
 
@@ -109,11 +108,6 @@ if __name__ == "__main__":
     #   classes_path
     # ----------------------------------------------------#
     classes_path = './model_data/cls_classes.txt'
-    # ----------------------------------------------------#
-    #   输入的图片大小
-    # ----------------------------------------------------#
-    input_shape = [299, 299]
-    # ------------------------------------------------------#
     #   所用模型种类 (请使用timm支持的模型名称)
     #   例如: 'resnet50', 'efficientnet_b0', 'vit_base_patch16_224',
     #        'swin_tiny_patch4_window7_224', 'inception_resnet_v2', 'inception_v3'
@@ -135,6 +129,12 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     model_path = ""
 
+    data_config = timm.data.resolve_data_config({}, model=backbone) #模型配置
+    # ----------------------------------------------------#
+    #   输入的图片大小
+    # ----------------------------------------------------#
+    input_shape = data_config['input_size'][1:]
+    # ------------------------------------------------------#
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   优化后的训练阶段参数 - 针对类别不平衡问题调整
     # ----------------------------------------------------------------------------------------------------------------------------#
@@ -150,9 +150,9 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
-    optimizer_type = "adam"
+    optimizer_type = "adamw"         #adam\sgd\adamw
     momentum = 0.9
-    weight_decay = 1e-4        # 添加权重衰减，防止过拟合
+    weight_decay = 1e-2        # 添加权重衰减，防止过拟合
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
@@ -341,19 +341,20 @@ if __name__ == "__main__":
         batch_size = Freeze_batch_size if Freeze_Train else Unfreeze_batch_size
 
         nbs = 64
-        lr_limit_max = 1e-3 if optimizer_type == 'adam' else 1e-1
-        lr_limit_min = 1e-4 if optimizer_type == 'adam' else 5e-4
+        lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
+        lr_limit_min = 1e-4 if optimizer_type == 'adam' or 'adamw' else 5e-4
         # timm模型对ViT和Swin Transformer有更标准化的处理，可以统一学习率调整策略
         if 'vit' in backbone or 'swin' in backbone:
             nbs = 256
-            lr_limit_max = 1e-3 if optimizer_type == 'adam' else 1e-1
-            lr_limit_min = 1e-5 if optimizer_type == 'adam' else 5e-4
+            lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
+            lr_limit_min = 1e-5 if optimizer_type == 'adam' or 'adamw' else 5e-4
         Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
         Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
         optimizer = {
             'adam': optim.Adam(model_train.parameters(), Init_lr_fit, betas=(momentum, 0.999),
                                weight_decay=weight_decay),
+            'adamw': optim.AdamW(model_train.parameters(), Init_lr_fit, betas=(momentum, 0.999), weight_decay=weight_decay), # 推荐
             'sgd': optim.SGD(model_train.parameters(), Init_lr_fit, momentum=momentum, nesterov=True)
         }[optimizer_type]
 
@@ -365,8 +366,8 @@ if __name__ == "__main__":
         if epoch_step == 0 or epoch_step_val == 0:
             raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
 
-        train_dataset = DataGenerator(train_lines, input_shape, random=True, autoaugment_flag=True)
-        val_dataset = DataGenerator(val_lines, input_shape, random=False, autoaugment_flag=False)
+        train_dataset = DataGenerator(train_lines, input_shape, backbone=backbone, random=True, autoaugment_flag=True)
+        val_dataset = DataGenerator(val_lines, input_shape, backbone=backbone, random=False, autoaugment_flag=False)
 
         if distributed:
             # 分布式训练暂不支持加权采样（需要额外的复杂处理）
@@ -419,12 +420,12 @@ if __name__ == "__main__":
                 batch_size = Unfreeze_batch_size
 
                 nbs = 64
-                lr_limit_max = 1e-3 if optimizer_type == 'adam' else 1e-1
-                lr_limit_min = 1e-4 if optimizer_type == 'adam' else 5e-4
+                lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
+                lr_limit_min = 1e-4 if optimizer_type == 'adam' or 'adamw' else 5e-4
                 if 'vit' in backbone or 'swin' in backbone:
                     nbs = 256
-                    lr_limit_max = 1e-3 if optimizer_type == 'adam' else 1e-1
-                    lr_limit_min = 1e-5 if optimizer_type == 'adam' else 5e-4
+                    lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
+                    lr_limit_min = 1e-5 if optimizer_type == 'adam' or 'adamw' else 5e-4
                 Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
                 Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 

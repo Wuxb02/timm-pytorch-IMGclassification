@@ -86,8 +86,13 @@ def generate_gradcam(
 
     # 调整大小
     image_data = letterbox_image(image_rgb, [input_shape[1], input_shape[0]], False)
-    image_data = np.expand_dims(np.transpose(preprocess_input(
-        np.array(image_data, np.float32)), (2, 0, 1)), 0)
+    image_data = np.expand_dims(
+        np.transpose(
+            preprocess_input(np.array(image_data, np.float32), backbone),
+            (2, 0, 1)
+        ),
+        0
+    )
 
     # 转换为Tensor
     input_tensor = torch.from_numpy(image_data).type(torch.FloatTensor)

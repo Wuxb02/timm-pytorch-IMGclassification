@@ -9,16 +9,17 @@ from .utils_aug import CenterCrop, ImageNetPolicy, RandomResizedCrop, Resize
 
 
 class DataGenerator(data.Dataset):
-    def __init__(self, annotation_lines, input_shape, random=True, autoaugment_flag=True):
+    def __init__(self, annotation_lines, input_shape, backbone=None, random=True, autoaugment_flag=True):
         self.annotation_lines   = annotation_lines
         self.input_shape        = input_shape
+        self.backbone           = backbone  # 新增：存储模型名称
         self.random             = random
-        
+
         self.autoaugment_flag   = autoaugment_flag
         if self.autoaugment_flag:
             self.resize_crop = RandomResizedCrop(input_shape)
             self.policy      = ImageNetPolicy()
-            
+
             self.resize      = Resize(input_shape[0] if input_shape[0] == input_shape[1] else input_shape)
             self.center_crop = CenterCrop(input_shape)
 
@@ -26,7 +27,8 @@ class DataGenerator(data.Dataset):
         return len(self.annotation_lines)
 
     def __getitem__(self, index):
-        annotation_path = self.annotation_lines[index].split(';')[1].split()[0]
+        # annotation_path = self.annotation_lines[index].split(';')[1].split()[0]
+        annotation_path = self.annotation_lines[index].split(';')[1].replace('\n','')
         image = Image.open(annotation_path)
         #------------------------------#
         #   读取图像并转换成RGB图像
@@ -36,7 +38,10 @@ class DataGenerator(data.Dataset):
             image = self.AutoAugment(image, random=self.random)
         else:
             image = self.get_random_data(image, self.input_shape, random=self.random)
-        image = np.transpose(preprocess_input(np.array(image).astype(np.float32)), [2, 0, 1])
+        image = np.transpose(
+            preprocess_input(np.array(image).astype(np.float32), self.backbone),
+            [2, 0, 1]
+        )
 
         y = int(self.annotation_lines[index].split(';')[0])
         return image, y

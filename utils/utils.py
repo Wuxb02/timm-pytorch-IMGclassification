@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import torch
 from PIL import Image
+import timm
 
 from .utils_aug import resize, center_crop
 
@@ -45,7 +46,7 @@ def letterbox_image(image, size, letterbox_image):
 #---------------------------------------------------#
 #   获得类
 #---------------------------------------------------#
-def get_classes(classes_path):
+def get_classes(classes_path, old=False):
     """
     读取类别文件,支持两种格式:
     1. 新格式: "0, normal" (类别ID, 英文名称)
@@ -64,7 +65,9 @@ def get_classes(classes_path):
         if not line:  # 跳过空行
             continue
 
-        if ',' in line:
+        if old:
+            class_names.append(line)
+        elif ',' in line:
             # 新格式: "0, normal"
             parts = line.split(',', 1)
             if len(parts) == 2:
@@ -81,12 +84,39 @@ def get_classes(classes_path):
 #----------------------------------------#
 #   预处理训练图片
 #----------------------------------------#
-def preprocess_input(x):
-    # x /= 127.5
-    # x -= 1.
-    x /= 255
-    x -= np.array([0.485, 0.456, 0.406])
-    x /= np.array([0.229, 0.224, 0.225])
+def preprocess_input(x, backbone=None):
+    """
+    图像归一化预处理
+
+    Args:
+        x: 输入图像数组 (H, W, C)
+        backbone: timm模型名称（可选）
+                 - 如果提供，使用模型特定的归一化参数
+                 - 如果为None，使用默认ImageNet参数（向后兼容）
+
+    Returns:
+        归一化后的图像数组
+    """
+    x = x / 255.0
+
+    # 动态获取归一化参数
+    if backbone is not None:
+        try:
+            data_config = timm.data.resolve_data_config({}, model=backbone)
+            mean = np.array(data_config.get('mean', [0.485, 0.456, 0.406]))
+            std = np.array(data_config.get('std', [0.229, 0.224, 0.225]))
+        except Exception as e:
+            # 回退到默认参数（兼容性保障）
+            print(f"[Warning] 无法获取模型 {backbone} 的归一化配置，使用默认参数: {e}")
+            mean = np.array([0.485, 0.456, 0.406])
+            std = np.array([0.229, 0.224, 0.225])
+    else:
+        # 默认ImageNet参数（向后兼容旧代码）
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+
+    x -= mean
+    x /= std
     return x
 
 def show_config(**kwargs):
