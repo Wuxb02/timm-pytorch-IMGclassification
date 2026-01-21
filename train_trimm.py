@@ -120,7 +120,7 @@ if __name__ == "__main__":
     #   可以通过 timm.list_models('*inception*') 查看支持的名称
     # ------------------------------------------------------#
     # 推荐模型优先级：对小数据集分类效果更好
-    backbone = "inception_resnet_v2"  # 更适合小数据集的模型
+    backbone = "inception_v3"  # 更适合小数据集的模型
     # 其他备选模型:
     # backbone = "convnext_tiny"     # 现代CNN架构
     # backbone = "swin_small_patch4_window7_224"  # 适中的Transformer
@@ -458,29 +458,14 @@ if __name__ == "__main__":
 
             set_optimizer_lr(optimizer, lr_scheduler_func, epoch)
 
-            # ------------------------------------------------------------------------------------------#
-            #   !!! 核心修改：适配 inception_v3 (timm名称) !!!
-            #   timm 的 inception_v3 也能与 fit_one_epoch_incep 配合工作，无需修改此处的逻辑
-            # ------------------------------------------------------------------------------------------#
-            # 使用带有早停功能的训练循环(传入动态参数 + 损失函数)
-            if backbone == "inception_v3":
-                should_stop = fit_one_epoch_incep(
-                    model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
-                    gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
-                    early_stopping=early_stopping, model_checkpoint=model_checkpoint,
-                    num_classes=num_classes, class_names=class_names,
-                    samples_per_class=samples_per_class, minority_idx=minority_idx,
-                    criterion=criterion
-                )
-            else:
-                should_stop = fit_one_epoch(
-                    model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
-                    gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
-                    early_stopping=early_stopping, model_checkpoint=model_checkpoint,
-                    num_classes=num_classes, class_names=class_names,
-                    samples_per_class=samples_per_class, minority_idx=minority_idx,
-                    criterion=criterion
-                )
+            should_stop = fit_one_epoch(
+                model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
+                gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
+                early_stopping=early_stopping, model_checkpoint=model_checkpoint,
+                num_classes=num_classes, class_names=class_names,
+                samples_per_class=samples_per_class, minority_idx=minority_idx,
+                criterion=criterion
+            )
             
             # 检查是否应该早停
             if should_stop:

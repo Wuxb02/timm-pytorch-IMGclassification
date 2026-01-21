@@ -68,27 +68,65 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         #----------------------#
         optimizer.zero_grad()
         if not fp16:
-            #----------------------#
+            # ----------------------#
             #   前向传播
-            #----------------------#
-            outputs     = model_train(images)
-            #----------------------#
-            #   计算损失
-            #----------------------#
-            loss_value  = criterion(outputs, targets)
+            # ----------------------#
+            outputs = model_train(images)
+
+            # ----------------------#
+            #   通用损失计算逻辑
+            #   自动兼容 Inception 等返回 Tuple 的模型
+            # ----------------------#
+            if isinstance(outputs, (tuple, list)):
+                # 如果输出是元组 (主输出, 辅助输出1, ...)
+                main_output = outputs[0]
+                aux_outputs = outputs[1:]
+                
+                # 计算主损失
+                loss_value = criterion(main_output, targets)
+                
+                # 累加辅助损失 (通常权重为0.4，也可以做成参数传入)
+                for aux in aux_outputs:
+                    loss_value += 0.4 * criterion(aux, targets)
+                    
+                # 用于计算准确率的只是主输出
+                outputs_for_acc = main_output
+            else:
+                # 标准单输出模型
+                loss_value = criterion(outputs, targets)
+                outputs_for_acc = outputs
             loss_value.backward()
             optimizer.step()
         else:
-            from torch.cuda.amp import autocast
-            with autocast():
-                #----------------------#
+            from torch.amp import autocast
+            with autocast('cuda'):
+                # ----------------------#
                 #   前向传播
-                #----------------------#
-                outputs     = model_train(images)
-                #----------------------#
-                #   计算损失
-                #----------------------#
-                loss_value  = criterion(outputs, targets)
+                # ----------------------#
+                outputs = model_train(images)
+
+                # ----------------------#
+                #   通用损失计算逻辑
+                #   自动兼容 Inception 等返回 Tuple 的模型
+                # ----------------------#
+                if isinstance(outputs, (tuple, list)):
+                    # 如果输出是元组 (主输出, 辅助输出1, ...)
+                    main_output = outputs[0]
+                    aux_outputs = outputs[1:]
+                    
+                    # 计算主损失
+                    loss_value = criterion(main_output, targets)
+                    
+                    # 累加辅助损失 (通常权重为0.4，也可以做成参数传入)
+                    for aux in aux_outputs:
+                        loss_value += 0.4 * criterion(aux, targets)
+                        
+                    # 用于计算准确率的只是主输出
+                    outputs_for_acc = main_output
+                else:
+                    # 标准单输出模型
+                    loss_value = criterion(outputs, targets)
+                    outputs_for_acc = outputs
             #----------------------#
             #   反向传播
             #----------------------#
@@ -98,7 +136,7 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
 
         total_loss += loss_value.item()
         with torch.no_grad():
-            predictions = torch.argmax(F.softmax(outputs, dim=-1), dim=-1)
+            predictions = torch.argmax(F.softmax(outputs_for_acc, dim=-1), dim=-1)
             accuracy = torch.mean((predictions == targets).type(torch.FloatTensor))
             total_accuracy += accuracy.item()
             
