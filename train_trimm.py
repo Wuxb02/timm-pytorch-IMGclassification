@@ -143,7 +143,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
-    optimizer_type = "adam"         #adam\sgd\adamw
+    optimizer_type = "adamw"         #adam\sgd\adamw
     momentum = 0.9
     weight_decay = 1e-4        # 添加权重衰减，防止过拟合
     lr_decay_type = "cos"
@@ -211,9 +211,9 @@ if __name__ == "__main__":
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
     if 'ception' in backbone.lower():  # 处理Inception的辅助分类头
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = False)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=0.2, aux_logits = False)
     else:
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=0.2)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
     # model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, img_size=input_shape[0])
 
@@ -337,13 +337,13 @@ if __name__ == "__main__":
         batch_size = Freeze_batch_size if Freeze_Train else Unfreeze_batch_size
 
         nbs = 64
-        lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
-        lr_limit_min = 1e-4 if optimizer_type == 'adam' or 'adamw' else 5e-4
+        lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
+        lr_limit_min = 1e-4 if optimizer_type in ['adam', 'adamw'] else 5e-4
         # timm模型对ViT和Swin Transformer有更标准化的处理，可以统一学习率调整策略
         if 'vit' in backbone or 'swin' in backbone:
             nbs = 256
-            lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
-            lr_limit_min = 1e-5 if optimizer_type == 'adam' or 'adamw' else 5e-4
+            lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
+            lr_limit_min = 1e-5 if optimizer_type in ['adam', 'adamw'] else 5e-4
         Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
         Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
@@ -354,7 +354,7 @@ if __name__ == "__main__":
             'sgd': optim.SGD(model_train.parameters(), Init_lr_fit, momentum=momentum, nesterov=True)
         }[optimizer_type]
 
-        lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, UnFreeze_Epoch)
+        lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch)
 
         epoch_step = num_train // batch_size
         epoch_step_val = num_val // batch_size
@@ -395,7 +395,7 @@ if __name__ == "__main__":
 
         # 初始化早停和模型检查点
         early_stopping = EarlyStopping(
-            patience=50,           # 30个epoch没有改善就停止
+            patience=30,           # 30个epoch没有改善就停止
             min_delta=0.001,       # 最小改善阈值
             restore_best_weights=True,
             save_dir=save_dir,
@@ -425,7 +425,7 @@ if __name__ == "__main__":
                 Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
                 Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
-                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, UnFreeze_Epoch)
+                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch)
 
                 # ------------------------------------#
                 #   !!! 核心修改：使用新的解冻函数 !!!
