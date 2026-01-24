@@ -33,17 +33,16 @@ def freeze_timm_backbone(model):
         param.requires_grad = False
 
     # 解冻分类头
-    try:
-        # 大多数timm模型都有get_classifier()方法
-        classifier_params = model.get_classifier().parameters()
-        for param in classifier_params:
+    # 解冻主分类头
+    if hasattr(model, 'get_classifier'):
+        for param in model.get_classifier().parameters():
             param.requires_grad = True
-        print("Successfully unfroze the classifier head.")
-    except AttributeError:
-        # 对于没有get_classifier()的旧模型，可能需要手动指定，例如 model.fc
-        # 这里只是一个备用方案，大多数现代timm模型都支持 get_classifier()
-        print("Warning: model.get_classifier() not found. Freezing might not work as expected.")
-
+    
+    # 【新增】解冻 Inception 的辅助分类头
+    if hasattr(model, 'AuxLogits'):
+        print("Unfreezing AuxLogits...")
+        for param in model.AuxLogits.parameters():
+            param.requires_grad = True
 
 def unfreeze_timm_backbone(model):
     """解冻timm模型的所有参数"""
@@ -161,7 +160,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
-    use_weighted_sampler = True  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
+    use_weighted_sampler = False  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
 
     # ------------------------------------------------------#
     #   损失函数配置 (Loss Function Selection)
@@ -367,7 +366,7 @@ if __name__ == "__main__":
             raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
 
         train_dataset = DataGenerator(train_lines, input_shape, backbone=backbone, random=True, autoaugment_flag=True)
-        val_dataset = DataGenerator(val_lines, input_shape, backbone=backbone, random=True, autoaugment_flag=False)
+        val_dataset = DataGenerator(val_lines, input_shape, backbone=backbone, random=False, autoaugment_flag=False)
 
         if distributed:
             # 分布式训练暂不支持加权采样（需要额外的复杂处理）
