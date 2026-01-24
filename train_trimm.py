@@ -37,12 +37,6 @@ def freeze_timm_backbone(model):
     if hasattr(model, 'get_classifier'):
         for param in model.get_classifier().parameters():
             param.requires_grad = True
-    
-    # 【新增】解冻 Inception 的辅助分类头
-    if hasattr(model, 'AuxLogits'):
-        print("Unfreezing AuxLogits...")
-        for param in model.AuxLogits.parameters():
-            param.requires_grad = True
 
 def unfreeze_timm_backbone(model):
     """解冻timm模型的所有参数"""
@@ -217,7 +211,7 @@ if __name__ == "__main__":
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
     if 'ception' in backbone.lower():  # 处理Inception的辅助分类头
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = True)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = False)
     else:
         model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
