@@ -32,6 +32,7 @@ model_data/*.pth
 # 训练模型目录（所有内容）
 # ============================================
 models/*
+model_records/*
 
 # ============================================
 # 数据集目录（仅图片文件，保留目录结构）
@@ -45,6 +46,8 @@ datasets/**/*.JPEG
 datasets/**/*.PNG
 datasets/**/*.bmp
 datasets/**/*.gif
+datasets/**/*.txt
+datasets/**/*.xlsx
 
 # 保留 .gitkeep 文件以维持空目录
 !datasets/**/.gitkeep
