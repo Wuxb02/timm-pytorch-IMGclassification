@@ -178,7 +178,7 @@ if __name__ == "__main__":
     focal_gamma = 2.0        # 聚焦参数,越大越关注困难样本
 
     # 类别平衡Focal Loss 参数 (loss_type为'cb_focal'时生效)
-    cb_focal_beta = 0.9   # 重采样参数,越接近1类别平衡效果越强
+    cb_focal_beta = 0.99   # 重采样参数,越接近1类别平衡效果越强
 
     # 标签平滑参数 (loss_type为'label_smoothing'时生效)
     label_smoothing = 0.1    # 平滑系数,通常取0.1
