@@ -679,21 +679,13 @@ def compute_bootstrap_ci(labels, preds, probs, n_bootstrap=1000, ci=95,
 
 def draw_roc_curves(labels, probs, class_names, output_path):
     """
-    绘制多分类ROC曲线（包含每类、Macro、Micro平均）
-
-    参数：
-        labels: 真实标签 (n_samples,)
-        probs: 预测概率 (n_samples, n_classes)
-        class_names: 类别名称列表
-        output_path: 输出文件路径
-
-    返回：
-        dict: 各类AUC值
+    绘制多分类ROC曲线（修改版：无平均值、图例对齐、带数据点）
     """
     from sklearn.metrics import roc_curve, auc
     from sklearn.preprocessing import label_binarize
     import matplotlib.pyplot as plt
     from itertools import cycle
+    import numpy as np
 
     n_classes = len(class_names)
     labels_onehot = label_binarize(labels, classes=range(n_classes))
@@ -709,74 +701,65 @@ def draw_roc_curves(labels, probs, class_names, output_path):
         fpr[i], tpr[i], _ = roc_curve(labels_onehot[:, i], probs[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
 
-    # 计算Micro平均
-    fpr["micro"], tpr["micro"], _ = roc_curve(labels_onehot.ravel(),
-                                               probs.ravel())
-    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+    # --- 1. 删除 Micro 和 Macro 平均值的计算与绘图 ---
 
-    # 计算Macro平均
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
-    mean_tpr = np.zeros_like(all_fpr)
-    for i in range(n_classes):
-        mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
-    mean_tpr /= n_classes
-    fpr["macro"] = all_fpr
-    tpr["macro"] = mean_tpr
-    roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+    # 绘图设置
+    plt.figure(figsize=(8, 6), dpi=300) # 调整尺寸使其更紧凑
+    plt.rcParams.update({
+        'font.size': 16,              # 全局基础字体大小
+        'font.family': 'Arial',  # 默认字体使用非衬线体（更美观）
+        'axes.grid': False            # 去掉网格（根据原图风格）
+    })
 
-    # 绘图
-    plt.figure(figsize=(12, 10), dpi=300)
-    plt.rcParams['font.family'] = 'Times New Roman'
-    plt.rcParams['axes.unicode_minus'] = False
-
-    # 绘制Macro和Micro平均
-    plt.plot(fpr["macro"], tpr["macro"],
-             label=f'Macro-average (AUC = {roc_auc["macro"]:.4f})',
-             color='navy', linestyle=':', linewidth=3)
-    plt.plot(fpr["micro"], tpr["micro"],
-             label=f'Micro-average (AUC = {roc_auc["micro"]:.4f})',
-             color='purple', linestyle='-.', linewidth=3)
+    # 定义颜色循环 (参考了常见的科研配色)
+    colors = cycle(['#1f77b4', '#d62728', '#2ca02c', '#bcbd22', '#17becf', '#9467bd'])
+    
+    # 计算类名最大长度，用于图例对齐
+    max_name_len = max([len(name) for name in class_names])
 
     # 绘制各类别曲线
-    colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
     for i, color in zip(range(n_classes), colors):
-        plt.plot(fpr[i], tpr[i], color=color, lw=2,
-                 label=f'{class_names[i]} (AUC = {roc_auc[i]:.4f})')
+        # --- 2. 构造对齐的图例标签 ---
+        # {name:<{width}} 表示左对齐并在右侧填充空格
+        # AUC保留3位小数，与提供的参考图一致
+        label_str = f"{class_names[i]:<{max_name_len}}   AUC = {roc_auc[i]:.3f}"
+        
+        # --- 3. 添加小圆点 (marker='.') ---
+        plt.plot(fpr[i], tpr[i], color=color, lw=1.5,
+                 marker='.',          # 设置标记样式为小圆点
+                 markersize=4,        # 设置点的大小
+                 markevery=0.2,      # (可选) 如果数据点太密，可以设置每隔多少个点画一个，例如 0.05 或 20
+                 label=label_str)
 
-    # 对角线参考
-    plt.plot([0, 1], [0, 1], 'k--', lw=2, alpha=0.5)
-
+    # 装饰图像
+    # plt.plot([0, 1], [0, 1], 'k--', lw=1.5, alpha=0.5) # 对角线
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate (1-Specificity)', fontsize=14)
-    plt.ylabel('True Positive Rate (Sensitivity)', fontsize=14)
-    plt.title('Multi-Class ROC Curves', fontsize=16, fontweight='bold')
-    plt.legend(loc="lower right", fontsize=12)
-    plt.grid(True, alpha=0.3)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    
+    # --- 图例设置重点 ---
+    # 使用等宽字体 (monospace) 确保空格宽度一致，从而实现对齐
+    # loc='lower right' 对应参考图位置
+    plt.legend(loc="lower right", 
+               prop={'family': 'monospace'}, 
+               framealpha=1) # 增加背景不透明度，使文字更清晰
+               
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
     return roc_auc
 
-
 def draw_pr_curves(labels, probs, class_names, output_path):
     """
-    绘制多分类PR（精确度-召回率）曲线
-
-    参数：
-        labels: 真实标签 (n_samples,)
-        probs: 预测概率 (n_samples, n_classes)
-        class_names: 类别名称列表
-        output_path: 输出文件路径
-
-    返回：
-        dict: 各类AP值
+    绘制多分类PR曲线（修改版：无平均值、图例对齐、带数据点）
     """
     from sklearn.metrics import precision_recall_curve, average_precision_score
     from sklearn.preprocessing import label_binarize
     import matplotlib.pyplot as plt
     from itertools import cycle
+    import numpy as np
 
     n_classes = len(class_names)
     labels_onehot = label_binarize(labels, classes=range(n_classes))
@@ -787,62 +770,59 @@ def draw_pr_curves(labels, probs, class_names, output_path):
     recall = dict()
     ap = dict()  # Average Precision
 
-    # 计算每类的PR曲线
+    # 计算每类的PR曲线和AP值
     for i in range(n_classes):
         precision[i], recall[i], _ = precision_recall_curve(
             labels_onehot[:, i], probs[:, i])
         ap[i] = average_precision_score(labels_onehot[:, i], probs[:, i])
 
-    # 计算Micro平均
-    precision["micro"], recall["micro"], _ = precision_recall_curve(
-        labels_onehot.ravel(), probs.ravel())
-    ap["micro"] = average_precision_score(labels_onehot, probs, average="micro")
+    # --- 1. 删除 Micro 和 Macro 平均值的计算与绘图 ---
 
-    # 计算Macro平均AP
-    ap["macro"] = np.mean([ap[i] for i in range(n_classes)])
+    # 绘图设置
+    plt.figure(figsize=(8, 6), dpi=300)
+    plt.rcParams.update({
+        'font.size': 16,              # 全局基础字体大小
+        'font.family': 'Arial',  # 默认字体使用非衬线体（更美观）
+        'axes.grid': False            # 去掉网格（根据原图风格）
+    })
 
-    # 绘图
-    plt.figure(figsize=(12, 10), dpi=300)
-    plt.rcParams['font.family'] = 'Times New Roman'
-    plt.rcParams['axes.unicode_minus'] = False
+    # 定义颜色循环
+    colors = cycle(['#1f77b4', '#d62728', '#2ca02c', '#bcbd22', '#17becf', '#9467bd'])
 
-    # Macro平均（通过插值计算）
-    all_recall = np.linspace(0, 1, 100)
-    mean_precision = np.zeros_like(all_recall)
-    for i in range(n_classes):
-        # PR曲线需要反向插值（recall从大到小）
-        mean_precision += np.interp(all_recall, recall[i][::-1],
-                                    precision[i][::-1])
-    mean_precision /= n_classes
-    plt.plot(all_recall, mean_precision,
-             label=f'Macro-average (AP = {ap["macro"]:.4f})',
-             color='navy', linestyle=':', linewidth=3)
+    # 计算类名最大长度，用于图例对齐
+    max_name_len = max([len(name) for name in class_names])
 
-    # Micro平均
-    plt.plot(recall["micro"], precision["micro"],
-             label=f'Micro-average (AP = {ap["micro"]:.4f})',
-             color='purple', linestyle='-.', linewidth=3)
-
-    # 各类别曲线
-    colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
+    # 绘制各类别曲线
     for i, color in zip(range(n_classes), colors):
-        class_ratio = np.sum(labels == i) / len(labels)
-        plt.plot(recall[i], precision[i], color=color, lw=2,
-                 label=f'{class_names[i]} (AP={ap[i]:.4f}, Ratio={class_ratio:.1%})')
+        # --- 2. 构造对齐的图例标签 ---
+        # 格式：Name (填充空格) AP = 0.xxx
+        # 为了对齐，移除了原代码中的 Ratio 显示
+        label_str = f"{class_names[i]:<{max_name_len}}   AP = {ap[i]:.3f}"
+
+        # --- 3. 添加小圆点 ---
+        # markevery=0.05 意味着每隔总点数的 5% 画一个点，防止点太密看不清线条
+        plt.plot(recall[i], precision[i], color=color, lw=1.5,
+                 marker='.', 
+                 markersize=4,
+                 markevery=0.2, 
+                 label=label_str)
 
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.xlabel('Recall', fontsize=14)
-    plt.ylabel('Precision', fontsize=14)
-    plt.title('Multi-Class Precision-Recall Curves', fontsize=16, fontweight='bold')
-    plt.legend(loc="best", fontsize=11)
-    plt.grid(True, alpha=0.3)
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    
+    # --- 图例设置 ---
+    # 使用等宽字体 (monospace) 配合 label_str 中的空格填充实现对齐
+    plt.legend(loc="lower left", # PR曲线通常左下角较空
+               prop={'family': 'monospace'}, 
+               framealpha=1)
+               
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
     return ap
-
 
 def draw_confidence_intervals(ci_results, class_names, output_path):
     """
