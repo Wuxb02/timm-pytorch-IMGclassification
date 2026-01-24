@@ -113,7 +113,7 @@ if __name__ == "__main__":
     #   可以通过 timm.list_models('*inception*') 查看支持的名称
     # ------------------------------------------------------#
     # 推荐模型优先级：对小数据集分类效果更好
-    backbone = "inception_v3"  # 更适合小数据集的模型
+    backbone = "densenet121"  # 更适合小数据集的模型
     # 其他备选模型:
     # backbone = "convnext_tiny"     # 现代CNN架构
     # backbone = "swin_small_patch4_window7_224"  # 适中的Transformer
@@ -149,9 +149,9 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
-    optimizer_type = "adamw"         #adam\sgd\adamw
+    optimizer_type = "adam"         #adam\sgd\adamw
     momentum = 0.9
-    weight_decay = 1e-2        # 添加权重衰减，防止过拟合
+    weight_decay = 1e-4        # 添加权重衰减，防止过拟合
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
-    use_weighted_sampler = False  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
+    use_weighted_sampler = True  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
 
     # ------------------------------------------------------#
     #   损失函数配置 (Loss Function Selection)
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     #   数据集路径
     # ------------------------------------------------------#
     train_annotation_path = "cls_train.txt"
-    test_annotation_path = 'cls_test.txt'
+    test_annotation_path = 'cls_val.txt'
 
     # ------------------------------------------------------#
     #   设置用到的显卡
@@ -216,7 +216,10 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
-    model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = True if 'ception' in backbone else False)
+    if 'ception' in backbone.lower():  # 处理Inception的辅助分类头
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = True)
+    else:
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
     # model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, img_size=input_shape[0])
 
