@@ -42,7 +42,7 @@ class Eval_Classification(Classification):
         #---------------------------------------------------------#
         image_data = np.transpose(
             np.expand_dims(
-                preprocess_input(np.array(image_data, np.float32), self.backbone), 0
+                preprocess_input(np.array(image_data, np.float32), self._backbone), 0
             ),
             (0, 3, 1, 2)
         )
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     classfication = Eval_Classification()
 
     # 提取模型名称和数据集名称
-    model_name = classfication.backbone
+    model_name = classfication._backbone
     dataset_name = os.path.splitext(os.path.basename(test_annotation_path))[0]
 
     # 构建动态输出文件夹名称

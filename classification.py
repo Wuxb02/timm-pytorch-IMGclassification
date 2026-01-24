@@ -14,29 +14,29 @@ from utils.utils import (cvtColor, get_classes, letterbox_image,
 #   model_path和classes_path和backbone都需要修改！
 # --------------------------------------------#
 class Classification(object):
+        # --------------------------------------------------------------------#
+    #   所用模型种类：
+    #   mobilenetv2、
+    #   resnet18、resnet34、resnet50、resnet101、resnet152
+    #   vgg11、vgg13、vgg16、vgg11_bn、vgg13_bn、vgg16_bn、
+    #   vit_b_16、
+    #   swin_transformer_tiny、swin_transformer_small、swin_transformer_base
+    #   xception、inceptionresnetv2、inceptionv3
+    #   densenet121、densenet161、densenet169、densenet201
+    # --------------------------------------------------------------------#
+    _backbone = 'inception_resnet_v2'
     _defaults = {
         # --------------------------------------------------------------------------#
         #   使用自己训练好的模型进行预测一定要修改model_path和classes_path！
         #   model_path指向logs文件夹下的权值文件，classes_path指向model_data下的txt
         #   如果出现shape不匹配，同时要注意训练时的model_path和classes_path参数的修改
         # --------------------------------------------------------------------------#
-        "model_path": 'models/inception_resnet_v2/best_epoch_weights.pth',
+        "model_path": f'models/{_backbone}/best_epoch_weights.pth',
         "classes_path": 'model_data/cls_classes.txt',
         # --------------------------------------------------------------------#
         #   输入的图片大小
         # --------------------------------------------------------------------#
-        "input_shape": [299, 299],
-        # --------------------------------------------------------------------#
-        #   所用模型种类：
-        #   mobilenetv2、
-        #   resnet18、resnet34、resnet50、resnet101、resnet152
-        #   vgg11、vgg13、vgg16、vgg11_bn、vgg13_bn、vgg16_bn、
-        #   vit_b_16、
-        #   swin_transformer_tiny、swin_transformer_small、swin_transformer_base
-        #   xception、inceptionresnetv2、inceptionv3
-        #   densenet121、densenet161、densenet169、densenet201
-        # --------------------------------------------------------------------#
-        "backbone": 'inception_resnet_v2',
+        "input_shape": timm.data.resolve_data_config({}, model=_backbone)['input_size'][1:],
         # --------------------------------------------------------------------#
         #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize
         #   否则对图像进行CenterCrop
@@ -79,14 +79,14 @@ class Classification(object):
         # ---------------------------------------------------#
         #   载入模型与权值
         # ---------------------------------------------------#
-        # if self.backbone not in ['vit_b_16', 'swin_transformer_tiny', 'swin_transformer_small',
+        # if self._backbone not in ['vit_b_16', 'swin_transformer_tiny', 'swin_transformer_small',
         #                          'swin_transformer_base']:
-        #     self.model = get_model_from_name[self.backbone](num_classes=self.num_classes, pretrained=False)
+        #     self.model = get_model_from_name[self._backbone](num_classes=self.num_classes, pretrained=False)
         # else:
-        #     self.model = get_model_from_name[self.backbone](input_shape=self.input_shape, num_classes=self.num_classes,
+        #     self.model = get_model_from_name[self._backbone](input_shape=self.input_shape, num_classes=self.num_classes,
         #                                                     pretrained=False)
         # trimm
-        self.model = timm.create_model(self.backbone, pretrained=False, num_classes=self.num_classes)
+        self.model = timm.create_model(self._backbone, pretrained=False, num_classes=self.num_classes)
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.load_state_dict(torch.load(self.model_path, map_location=device))
@@ -115,7 +115,7 @@ class Classification(object):
         # ---------------------------------------------------------#
         image_data = np.transpose(
             np.expand_dims(
-                preprocess_input(np.array(image_data, np.float32), self.backbone), 0
+                preprocess_input(np.array(image_data, np.float32), self._backbone), 0
             ),
             (0, 3, 1, 2)
         )
