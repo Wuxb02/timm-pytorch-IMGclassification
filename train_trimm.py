@@ -156,7 +156,7 @@ if __name__ == "__main__":
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
-    num_workers = 12            # 减少并行线程，避免数据加载冲突
+    num_workers = 2            # 减少并行线程，避免数据加载冲突
     
     # ------------------------------------------------------#
     #   数据不平衡处理配置
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
-    model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes)
+    model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, aux_logits = True if 'ception' in backbone else False)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
     # model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, img_size=input_shape[0])
 
@@ -367,7 +367,7 @@ if __name__ == "__main__":
             raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
 
         train_dataset = DataGenerator(train_lines, input_shape, backbone=backbone, random=True, autoaugment_flag=True)
-        val_dataset = DataGenerator(val_lines, input_shape, backbone=backbone, random=False, autoaugment_flag=False)
+        val_dataset = DataGenerator(val_lines, input_shape, backbone=backbone, random=True, autoaugment_flag=False)
 
         if distributed:
             # 分布式训练暂不支持加权采样（需要额外的复杂处理）
