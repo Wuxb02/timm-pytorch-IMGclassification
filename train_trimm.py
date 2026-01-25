@@ -98,6 +98,77 @@ def unfreeze_timm_backbone(model):
     print(f"  -> 全部参数已解冻: {trainable_params:,}")
 
 
+def get_layer_wise_param_groups(model, base_lr, lr_mult_early=0.01,
+                                 lr_mult_middle=0.1, lr_mult_late=0.5):
+    """
+    获取分层学习率的参数组，用于解冻阶段的微调。
+    早期层使用更小的学习率，避免破坏预训练特征。
+
+    Args:
+        model: timm模型实例
+        base_lr: 基础学习率（分类头使用此学习率）
+        lr_mult_early: 早期层学习率倍率（默认0.01）
+        lr_mult_middle: 中间层学习率倍率（默认0.1）
+        lr_mult_late: 后期层学习率倍率（默认0.5）
+
+    Returns:
+        list: 参数组列表，可直接传入优化器
+    """
+    classifier_names = ['head', 'fc', 'classifier', 'last_linear', 'output']
+    named_params = list(model.named_parameters())
+    total_trainable = len([p for _, p in named_params if p.requires_grad])
+
+    param_groups = {'early': [], 'middle': [], 'late': [], 'classifier': []}
+    trainable_idx = 0
+
+    for name, param in named_params:
+        if not param.requires_grad:
+            continue
+
+        is_classifier = any(cn in name for cn in classifier_names)
+        if is_classifier:
+            param_groups['classifier'].append(param)
+        else:
+            relative_pos = trainable_idx / total_trainable if total_trainable > 0 else 0
+            if relative_pos < 0.33:
+                param_groups['early'].append(param)
+            elif relative_pos < 0.66:
+                param_groups['middle'].append(param)
+            else:
+                param_groups['late'].append(param)
+        trainable_idx += 1
+
+    optimizer_groups = []
+    group_info = []
+    if param_groups['early']:
+        optimizer_groups.append({
+            'params': param_groups['early'],
+            'lr': base_lr * lr_mult_early
+        })
+        group_info.append(f"early({len(param_groups['early'])}): lr={base_lr * lr_mult_early:.2e}")
+    if param_groups['middle']:
+        optimizer_groups.append({
+            'params': param_groups['middle'],
+            'lr': base_lr * lr_mult_middle
+        })
+        group_info.append(f"middle({len(param_groups['middle'])}): lr={base_lr * lr_mult_middle:.2e}")
+    if param_groups['late']:
+        optimizer_groups.append({
+            'params': param_groups['late'],
+            'lr': base_lr * lr_mult_late
+        })
+        group_info.append(f"late({len(param_groups['late'])}): lr={base_lr * lr_mult_late:.2e}")
+    if param_groups['classifier']:
+        optimizer_groups.append({
+            'params': param_groups['classifier'],
+            'lr': base_lr
+        })
+        group_info.append(f"classifier({len(param_groups['classifier'])}): lr={base_lr:.2e}")
+
+    print(f"  -> 分层学习率参数组: {', '.join(group_info)}")
+    return optimizer_groups
+
+
 # -------------------------------------------------------------
 
 def create_weighted_sampler(annotation_lines, samples_per_class):
@@ -208,6 +279,13 @@ if __name__ == "__main__":
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
     num_workers = 2            # 减少并行线程，避免数据加载冲突
+
+    # ------------------------------------------------------------------#
+    #   解冻阶段学习率配置 - 防止解冻后过拟合
+    #   使用较低的固定学习率，避免破坏预训练特征
+    # ------------------------------------------------------------------#
+    Unfreeze_Init_lr = 1e-5    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
+    Unfreeze_Min_lr = 1e-7     # 解冻阶段最小学习率
 
     # ------------------------------------------------------#
     #   学习率范围配置（根据模型类型自动选择）
@@ -541,15 +619,13 @@ if __name__ == "__main__":
             if epoch >= Freeze_Epoch and not UnFreeze_flag and Freeze_Train:
                 batch_size = Unfreeze_batch_size
 
-                # 根据模型类型选择学习率配置
-                lr_config_key = 'transformer' if ('vit' in backbone or 'swin' in backbone) else 'default'
-                lr_config = LR_CONFIG[lr_config_key]
-                nbs = lr_config['nbs']
-                lr_limit_max = lr_config[optimizer_type]['lr_max']
-                lr_limit_min = lr_config[optimizer_type]['lr_min']
-
-                Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
-                Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
+                # ----------------------------------------------------------#
+                #   解冻阶段学习率策略改进：
+                #   使用固定的较低学习率，避免batch_size变化导致学习率骤降
+                #   同时防止解冻后学习率过高破坏预训练特征
+                # ----------------------------------------------------------#
+                Init_lr_fit = Unfreeze_Init_lr
+                Min_lr_fit = Unfreeze_Min_lr
 
                 remaining_epochs = UnFreeze_Epoch - epoch
                 lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs)
@@ -558,6 +634,18 @@ if __name__ == "__main__":
                 #   !!! 核心修改：使用新的解冻函数 !!!
                 # ------------------------------------#
                 unfreeze_timm_backbone(model)
+
+                # ----------------------------------------------------------#
+                #   使用分层学习率重新创建优化器
+                #   早期层使用更小的学习率，保护预训练特征
+                # ----------------------------------------------------------#
+                param_groups = get_layer_wise_param_groups(model, Init_lr_fit)
+                optimizer = {
+                    'adam': optim.Adam(param_groups, betas=(momentum, 0.999), weight_decay=weight_decay),
+                    'adamw': optim.AdamW(param_groups, betas=(momentum, 0.999), weight_decay=weight_decay),
+                    'sgd': optim.SGD(param_groups, momentum=momentum, nesterov=True, weight_decay=weight_decay)
+                }[optimizer_type]
+                print(f"[Unfreeze] 使用分层学习率，基础lr={Init_lr_fit:.2e}")
 
                 epoch_step = num_train // batch_size
                 epoch_step_val = num_val // batch_size

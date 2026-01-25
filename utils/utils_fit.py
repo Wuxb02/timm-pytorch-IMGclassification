@@ -117,9 +117,9 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
                     # 计算主损失
                     loss_value = criterion(main_output, targets)
                     
-                    # 累加辅助损失 (通常权重为0.4，也可以做成参数传入)
+                    # 累加辅助损失 (使用配置的权重)
                     for aux in aux_outputs:
-                        loss_value += 0.4 * criterion(aux, targets)
+                        loss_value += aux_loss_weight * criterion(aux, targets)
                         
                     # 用于计算准确率的只是主输出
                     outputs_for_acc = main_output
