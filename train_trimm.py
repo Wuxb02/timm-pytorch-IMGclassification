@@ -388,10 +388,10 @@ if __name__ == "__main__":
 
         gen = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                          pin_memory=True,
-                         drop_last=True, collate_fn=detection_collate, sampler=train_sampler)
+                         drop_last=False, collate_fn=detection_collate, sampler=train_sampler)
         gen_val = DataLoader(val_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                              pin_memory=True,
-                             drop_last=True, collate_fn=detection_collate, sampler=val_sampler)
+                             drop_last=False, collate_fn=detection_collate, sampler=val_sampler)
 
         # 初始化早停和模型检查点
         early_stopping = EarlyStopping(
@@ -425,7 +425,8 @@ if __name__ == "__main__":
                 Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
                 Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
-                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch)
+                remaining_epochs = UnFreeze_Epoch - epoch
+                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs)
 
                 # ------------------------------------#
                 #   !!! 核心修改：使用新的解冻函数 !!!
@@ -443,10 +444,10 @@ if __name__ == "__main__":
 
                 gen = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                                  pin_memory=True,
-                                 drop_last=True, collate_fn=detection_collate, sampler=train_sampler)
+                                 drop_last=False, collate_fn=detection_collate, sampler=train_sampler)
                 gen_val = DataLoader(val_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                                      pin_memory=True,
-                                     drop_last=True, collate_fn=detection_collate, sampler=val_sampler)
+                                     drop_last=False, collate_fn=detection_collate, sampler=val_sampler)
 
                 UnFreeze_flag = True
 

@@ -166,11 +166,22 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
 
             optimizer.zero_grad()
 
-            outputs     = model_train(images)
-            loss_value  = criterion(outputs, targets)
+            outputs = model_train(images)
+
+            # 兼容返回 (main, aux, ...) 的模型，验证阶段与训练阶段保持一致
+            if isinstance(outputs, (tuple, list)):
+                main_output = outputs[0]
+                aux_outputs = outputs[1:]
+                loss_value = criterion(main_output, targets)
+                for aux in aux_outputs:
+                    loss_value += 0.4 * criterion(aux, targets)
+                outputs_for_acc = main_output
+            else:
+                loss_value = criterion(outputs, targets)
+                outputs_for_acc = outputs
             
             val_loss    += loss_value.item()
-            predictions = torch.argmax(F.softmax(outputs, dim=-1), dim=-1)
+            predictions = torch.argmax(F.softmax(outputs_for_acc, dim=-1), dim=-1)
             accuracy    = torch.mean((predictions == targets).type(torch.FloatTensor))
             val_accuracy += accuracy.item()
             
