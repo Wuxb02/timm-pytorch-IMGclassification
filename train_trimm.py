@@ -143,9 +143,9 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
-    optimizer_type = "adamw"         #adam\sgd\adamw
+    optimizer_type = "adam"         #adam\sgd\adamw
     momentum = 0.9
-    weight_decay = 1e-4        # 添加权重衰减，防止过拟合
+    weight_decay = 1e-3        # 添加权重衰减，防止过拟合
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
-    use_weighted_sampler = True  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
+    use_weighted_sampler = False  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
 
     # ------------------------------------------------------#
     #   损失函数配置 (Loss Function Selection)
@@ -416,12 +416,12 @@ if __name__ == "__main__":
                 batch_size = Unfreeze_batch_size
 
                 nbs = 64
-                lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
-                lr_limit_min = 1e-4 if optimizer_type == 'adam' or 'adamw' else 5e-4
+                lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
+                lr_limit_min = 1e-4 if optimizer_type in ['adam', 'adamw'] else 5e-4
                 if 'vit' in backbone or 'swin' in backbone:
                     nbs = 256
-                    lr_limit_max = 1e-3 if optimizer_type == 'adam' or 'adamw' else 1e-1
-                    lr_limit_min = 1e-5 if optimizer_type == 'adam' or 'adamw' else 5e-4
+                    lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
+                    lr_limit_min = 1e-5 if optimizer_type in ['adam', 'adamw'] else 5e-4
                 Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
                 Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
