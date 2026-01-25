@@ -15,7 +15,7 @@ classes_path    = 'model_data/cls_classes.txt'
 #-------------------------------------------------------#
 datasets_path   = 'datasets'
 
-sets            = ["train", "test"]
+sets            = ["train", "test",'val']
 classes, _      = get_classes(classes_path,old=True)
 classes = [i.split(',')[0] for i in classes]
 

@@ -26,23 +26,76 @@ from utils.early_stopping import EarlyStopping, ModelCheckpoint
 
 # ----------------- 新增辅助函数用于冻结/解冻 -----------------
 def freeze_timm_backbone(model):
-    """冻结timm模型的主干部分"""
+    """
+    冻结 timm 模型的主干部分，仅保留分类头可训练
+
+    支持多种 timm 模型架构的分类头命名方式
+    """
     print("Freezing model backbone...")
-    # 冻结所有层
+
+    # 第一步：冻结所有参数
     for param in model.parameters():
         param.requires_grad = False
 
-    # 解冻分类头
-    # 解冻主分类头
+    # 第二步：解冻分类头（按优先级尝试多种方式）
+    classifier_unfrozen = False
+
+    # 方式1：使用 timm 的标准接口 get_classifier()
     if hasattr(model, 'get_classifier'):
-        for param in model.get_classifier().parameters():
-            param.requires_grad = True
+        try:
+            classifier = model.get_classifier()
+            if classifier is not None:
+                for param in classifier.parameters():
+                    param.requires_grad = True
+                classifier_unfrozen = True
+                print("  -> 通过 get_classifier() 解冻分类头")
+        except Exception as e:
+            print(f"  -> get_classifier() 失败: {e}")
+
+    # 方式2：尝试常见的分类头属性名
+    if not classifier_unfrozen:
+        classifier_names = ['head', 'fc', 'classifier', 'last_linear', 'output']
+        for name in classifier_names:
+            if hasattr(model, name):
+                classifier = getattr(model, name)
+                if classifier is not None and hasattr(classifier, 'parameters'):
+                    for param in classifier.parameters():
+                        param.requires_grad = True
+                    classifier_unfrozen = True
+                    print(f"  -> 通过属性 '{name}' 解冻分类头")
+                    break
+
+    # 方式3：解冻最后一个包含参数的模块
+    if not classifier_unfrozen:
+        print("  -> 警告: 未找到标准分类头，尝试解冻最后一层")
+        named_modules = list(model.named_modules())
+        for name, module in reversed(named_modules):
+            params = list(module.parameters(recurse=False))
+            if params:
+                for param in params:
+                    param.requires_grad = True
+                classifier_unfrozen = True
+                print(f"  -> 解冻模块: {name}")
+                break
+
+    # 统计可训练参数
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"  -> 可训练参数: {trainable_params:,} / {total_params:,} "
+          f"({100 * trainable_params / total_params:.2f}%)")
+
+    if not classifier_unfrozen:
+        print("\033[1;33m[Warning] 未能解冻任何分类头参数，请检查模型结构\033[0m")
+
 
 def unfreeze_timm_backbone(model):
-    """解冻timm模型的所有参数"""
+    """解冻 timm 模型的所有参数"""
     print("Unfreezing all model parameters...")
     for param in model.parameters():
         param.requires_grad = True
+
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"  -> 全部参数已解冻: {trainable_params:,}")
 
 
 # -------------------------------------------------------------
@@ -118,6 +171,11 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     pretrained = True
     # ----------------------------------------------------------------------------------------------------------------------------#
+    #   模型配置参数
+    # ----------------------------------------------------------------------------------------------------------------------------#
+    drop_rate = 0              # Dropout 比率
+    aux_loss_weight = 0.4        # Inception 辅助损失权重
+    # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型断点续练的权值路径
     # ----------------------------------------------------------------------------------------------------------------------------#
     model_path = ""
@@ -150,6 +208,24 @@ if __name__ == "__main__":
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
     num_workers = 2            # 减少并行线程，避免数据加载冲突
+
+    # ------------------------------------------------------#
+    #   学习率范围配置（根据模型类型自动选择）
+    # ------------------------------------------------------#
+    LR_CONFIG = {
+        'default': {
+            'nbs': 64,
+            'adam': {'lr_max': 1e-3, 'lr_min': 1e-4},
+            'adamw': {'lr_max': 1e-3, 'lr_min': 1e-4},
+            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-4},
+        },
+        'transformer': {  # ViT, Swin 等 Transformer 模型
+            'nbs': 256,
+            'adam': {'lr_max': 1e-3, 'lr_min': 1e-5},
+            'adamw': {'lr_max': 1e-3, 'lr_min': 1e-5},
+            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-4},
+        },
+    }
     
     # ------------------------------------------------------#
     #   数据不平衡处理配置
@@ -211,9 +287,9 @@ if __name__ == "__main__":
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
     if 'ception' in backbone.lower():  # 处理Inception的辅助分类头
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=0.2, aux_logits = False)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=drop_rate, aux_logits=False)
     else:
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=0.2)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=drop_rate)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
     # model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, img_size=input_shape[0])
 
@@ -225,21 +301,72 @@ if __name__ == "__main__":
         if local_rank == 0:
             print('Load weights {}.'.format(model_path))
 
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(model_path, map_location=device)
-        load_key, no_load_key, temp_dict = [], [], {}
-        for k, v in pretrained_dict.items():
-            if k in model_dict.keys() and np.shape(model_dict[k]) == np.shape(v):
-                temp_dict[k] = v
-                load_key.append(k)
+        try:
+            # 检查文件是否存在
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(f"权重文件不存在: {model_path}")
+
+            model_dict = model.state_dict()
+            checkpoint = torch.load(model_path, map_location=device)
+
+            # 统一从完整checkpoint格式读取
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                pretrained_dict = checkpoint['model_state_dict']
+                if local_rank == 0:
+                    print(f"检测到完整checkpoint格式，epoch={checkpoint.get('epoch', 'N/A')}")
             else:
-                no_load_key.append(k)
-        model_dict.update(temp_dict)
-        model.load_state_dict(model_dict)
-        if local_rank == 0:
-            print("\nSuccessful Load Key:", str(load_key)[:500], "……\nSuccessful Load Key Num:", len(load_key))
-            print("\nFail To Load Key:", str(no_load_key)[:500], "……\nFail To Load Key num:", len(no_load_key))
-            print("\n\033[1;33;44m温馨提示，head部分没有载入是正常现象，Backbone部分没有载入是错误的。\033[0m")
+                pretrained_dict = checkpoint
+
+            load_key, no_load_key, temp_dict = [], [], {}
+            for k, v in pretrained_dict.items():
+                if k in model_dict.keys():
+                    # 检查形状和数据类型
+                    if model_dict[k].shape == v.shape:
+                        if model_dict[k].dtype == v.dtype:
+                            temp_dict[k] = v
+                            load_key.append(k)
+                        else:
+                            # 尝试类型转换
+                            try:
+                                temp_dict[k] = v.to(model_dict[k].dtype)
+                                load_key.append(k)
+                                if local_rank == 0:
+                                    print(f"[Warning] 参数 {k} 类型转换: {v.dtype} -> {model_dict[k].dtype}")
+                            except Exception as e:
+                                no_load_key.append(k)
+                                if local_rank == 0:
+                                    print(f"[Warning] 参数 {k} 类型转换失败: {e}")
+                    else:
+                        no_load_key.append(k)
+                        if local_rank == 0:
+                            print(f"[Warning] 参数 {k} 形状不匹配: 期望{model_dict[k].shape}, 实际{v.shape}")
+                else:
+                    no_load_key.append(k)
+
+            model_dict.update(temp_dict)
+            model.load_state_dict(model_dict)
+
+            if local_rank == 0:
+                print(f"\n成功加载 {len(load_key)} 个参数")
+                if no_load_key:
+                    print(f"跳过 {len(no_load_key)} 个参数: {str(no_load_key)[:200]}...")
+
+                # 验证加载比例
+                load_ratio = len(load_key) / len(model_dict) * 100
+                if load_ratio < 50:
+                    print(f"\033[1;33;44m[Warning] 仅加载了 {load_ratio:.1f}% 的参数，请检查权重文件是否匹配\033[0m")
+                print("\n\033[1;33;44m温馨提示，head部分没有载入是正常现象，Backbone部分没有载入是错误的。\033[0m")
+
+        except FileNotFoundError as e:
+            print(f"\033[1;31m[Error] {e}\033[0m")
+            raise
+        except RuntimeError as e:
+            print(f"\033[1;31m[Error] 权重加载失败: {e}\033[0m")
+            print("可能原因: 1) 文件损坏 2) PyTorch版本不兼容 3) 模型结构不匹配")
+            raise
+        except Exception as e:
+            print(f"\033[1;31m[Error] 未知错误: {e}\033[0m")
+            raise
 
     if local_rank == 0:
         loss_history = LossHistory(save_dir, model, input_shape=input_shape)
@@ -336,14 +463,13 @@ if __name__ == "__main__":
 
         batch_size = Freeze_batch_size if Freeze_Train else Unfreeze_batch_size
 
-        nbs = 64
-        lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
-        lr_limit_min = 1e-4 if optimizer_type in ['adam', 'adamw'] else 5e-4
-        # timm模型对ViT和Swin Transformer有更标准化的处理，可以统一学习率调整策略
-        if 'vit' in backbone or 'swin' in backbone:
-            nbs = 256
-            lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
-            lr_limit_min = 1e-5 if optimizer_type in ['adam', 'adamw'] else 5e-4
+        # 根据模型类型选择学习率配置
+        lr_config_key = 'transformer' if ('vit' in backbone or 'swin' in backbone) else 'default'
+        lr_config = LR_CONFIG[lr_config_key]
+        nbs = lr_config['nbs']
+        lr_limit_max = lr_config[optimizer_type]['lr_max']
+        lr_limit_min = lr_config[optimizer_type]['lr_min']
+
         Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
         Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
@@ -415,13 +541,13 @@ if __name__ == "__main__":
             if epoch >= Freeze_Epoch and not UnFreeze_flag and Freeze_Train:
                 batch_size = Unfreeze_batch_size
 
-                nbs = 64
-                lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
-                lr_limit_min = 1e-4 if optimizer_type in ['adam', 'adamw'] else 5e-4
-                if 'vit' in backbone or 'swin' in backbone:
-                    nbs = 256
-                    lr_limit_max = 1e-3 if optimizer_type in ['adam', 'adamw'] else 1e-1
-                    lr_limit_min = 1e-5 if optimizer_type in ['adam', 'adamw'] else 5e-4
+                # 根据模型类型选择学习率配置
+                lr_config_key = 'transformer' if ('vit' in backbone or 'swin' in backbone) else 'default'
+                lr_config = LR_CONFIG[lr_config_key]
+                nbs = lr_config['nbs']
+                lr_limit_max = lr_config[optimizer_type]['lr_max']
+                lr_limit_min = lr_config[optimizer_type]['lr_min']
+
                 Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
                 Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
 
@@ -462,7 +588,7 @@ if __name__ == "__main__":
                 early_stopping=early_stopping, model_checkpoint=model_checkpoint,
                 num_classes=num_classes, class_names=class_names,
                 samples_per_class=samples_per_class, minority_idx=minority_idx,
-                criterion=criterion
+                criterion=criterion, aux_loss_weight=aux_loss_weight
             )
             
             # 检查是否应该早停

@@ -1,5 +1,6 @@
 import math
 from functools import partial
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -7,6 +8,43 @@ from PIL import Image
 import timm
 
 from .utils_aug import resize, center_crop
+
+
+# ---------------------------------------------------------#
+#   统一的模型保存函数
+# ---------------------------------------------------------#
+def save_checkpoint(model, optimizer, epoch, save_path,
+                    val_loss=None, val_acc=None,
+                    minority_score=None, extra_info=None):
+    """
+    统一的模型保存函数，保存完整的训练状态
+
+    Args:
+        model: 模型实例
+        optimizer: 优化器实例
+        epoch: 当前 epoch
+        save_path: 保存路径
+        val_loss: 验证损失
+        val_acc: 验证准确率
+        minority_score: 少数类别复合分数
+        extra_info: 额外信息字典
+    """
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict() if optimizer else None,
+        'val_loss': val_loss,
+        'val_acc': val_acc,
+        'minority_score': minority_score,
+        'save_time': datetime.now().isoformat(),
+        'pytorch_version': torch.__version__,
+    }
+
+    if extra_info:
+        checkpoint.update(extra_info)
+
+    torch.save(checkpoint, save_path)
+    return save_path
 
 
 #---------------------------------------------------------#

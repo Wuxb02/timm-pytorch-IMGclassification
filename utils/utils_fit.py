@@ -2,16 +2,15 @@ import os
 from threading import local
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from tqdm import tqdm
 
-from .utils import get_lr
+from .utils import get_lr, save_checkpoint
 from .focal_loss import FocalLoss, ClassBalancedFocalLoss, get_loss_function
 from .early_stopping import EarlyStopping, ModelCheckpoint, ClassBalancedMetrics
 
 
-def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None, criterion=None):
+def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None, criterion=None, aux_loss_weight=0.4):
     """
     新增参数:
         num_classes: 类别数量(从train_trimm.py传入)
@@ -19,6 +18,7 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         samples_per_class: 各类别样本数量
         minority_idx: 少数类别索引
         criterion: 损失函数实例(从train_trimm.py传入,推荐方式)
+        aux_loss_weight: Inception 等模型的辅助损失权重，默认 0.4
     """
     # 动态参数验证
     if samples_per_class is None or num_classes is None:
@@ -85,9 +85,9 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
                 # 计算主损失
                 loss_value = criterion(main_output, targets)
                 
-                # 累加辅助损失 (通常权重为0.4，也可以做成参数传入)
+                # 累加辅助损失 (使用配置的权重)
                 for aux in aux_outputs:
-                    loss_value += 0.4 * criterion(aux, targets)
+                    loss_value += aux_loss_weight * criterion(aux, targets)
                     
                 # 用于计算准确率的只是主输出
                 outputs_for_acc = main_output
@@ -136,8 +136,10 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
 
         total_loss += loss_value.item()
         with torch.no_grad():
-            predictions = torch.argmax(F.softmax(outputs_for_acc, dim=-1), dim=-1)
-            accuracy = torch.mean((predictions == targets).type(torch.FloatTensor))
+            # argmax 直接作用于 logits，无需 softmax
+            predictions = torch.argmax(outputs_for_acc, dim=-1)
+            # 使用 .float() 保持设备一致性
+            accuracy = (predictions == targets).float().mean()
             total_accuracy += accuracy.item()
             
             # 更新训练指标
@@ -164,8 +166,6 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
                 images  = images.cuda(local_rank)
                 targets = targets.cuda(local_rank)
 
-            optimizer.zero_grad()
-
             outputs = model_train(images)
 
             # 兼容返回 (main, aux, ...) 的模型，验证阶段与训练阶段保持一致
@@ -174,15 +174,17 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
                 aux_outputs = outputs[1:]
                 loss_value = criterion(main_output, targets)
                 for aux in aux_outputs:
-                    loss_value += 0.4 * criterion(aux, targets)
+                    loss_value += aux_loss_weight * criterion(aux, targets)
                 outputs_for_acc = main_output
             else:
                 loss_value = criterion(outputs, targets)
                 outputs_for_acc = outputs
             
             val_loss    += loss_value.item()
-            predictions = torch.argmax(F.softmax(outputs_for_acc, dim=-1), dim=-1)
-            accuracy    = torch.mean((predictions == targets).type(torch.FloatTensor))
+            # argmax 直接作用于 logits，无需 softmax
+            predictions = torch.argmax(outputs_for_acc, dim=-1)
+            # 使用 .float() 保持设备一致性
+            accuracy    = (predictions == targets).float().mean()
             val_accuracy += accuracy.item()
             
             # 更新验证指标
@@ -234,14 +236,38 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
                            minority_acc=val_detailed.get(minority_acc_key, 0),
                            balanced_acc=val_detailed.get('balanced_accuracy', 0))
         
-        # 原有的保存逻辑
+        # 原有的保存逻辑 - 使用统一的 checkpoint 格式
         if (epoch + 1) % save_period == 0 or epoch + 1 == Epoch:
-            torch.save(model.state_dict(), os.path.join(save_dir, "ep%03d-loss%.3f-val_loss%.3f.pth" % (epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)))
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch + 1,
+                save_path=os.path.join(save_dir, "ep%03d-loss%.3f-val_loss%.3f.pth" % (epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)),
+                val_loss=val_loss / epoch_step_val,
+                val_acc=val_accuracy / epoch_step_val,
+                minority_score=minority_score
+            )
 
         if len(loss_history.val_loss) <= 1 or (val_loss / epoch_step_val) <= min(loss_history.val_loss):
             print('Save best model to best_epoch_weights.pth')
-            torch.save(model.state_dict(), os.path.join(save_dir, "best_epoch_weights.pth"))
-            
-        torch.save(model.state_dict(), os.path.join(save_dir, "last_epoch_weights.pth"))
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch + 1,
+                save_path=os.path.join(save_dir, "best_epoch_weights.pth"),
+                val_loss=val_loss / epoch_step_val,
+                val_acc=val_accuracy / epoch_step_val,
+                minority_score=minority_score
+            )
+
+        save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            epoch=epoch + 1,
+            save_path=os.path.join(save_dir, "last_epoch_weights.pth"),
+            val_loss=val_loss / epoch_step_val,
+            val_acc=val_accuracy / epoch_step_val,
+            minority_score=minority_score
+        )
         
     return False  # 返回False表示继续训练

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import os
+from datetime import datetime
 
 
 class EarlyStopping:
@@ -61,9 +62,16 @@ class EarlyStopping:
             if self.restore_best_weights:
                 self.best_weights = {k: v.clone() for k, v in model.state_dict().items()}
                 
-            # Save best model to file
+            # Save best model to file - 使用统一的 checkpoint 格式
             best_model_path = os.path.join(self.save_dir, f'best_{self.metric}_model.pth')
-            torch.save(model.state_dict(), best_model_path)
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'best_value': self.best_value,
+                'metric': self.metric,
+                'save_time': datetime.now().isoformat(),
+            }
+            torch.save(checkpoint, best_model_path)
             
             if epoch is not None:
                 info_file = os.path.join(self.save_dir, f'best_{self.metric}_info.txt')
@@ -139,6 +147,7 @@ class ModelCheckpoint:
                 'model_state_dict': model.state_dict(),
                 'best_value': self.best,
                 'current_value': current_value,
+                'save_time': datetime.now().isoformat(),
             }
             
             if optimizer is not None:
