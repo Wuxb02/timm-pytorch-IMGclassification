@@ -149,6 +149,41 @@ class ImageNetPolicy(object):
     def __repr__(self):
         return "AutoAugment ImageNet Policy"
 
+
+class MedicalImagePolicy(object):
+    def __init__(self, fillcolor=(128, 128, 128)):
+        self.policies = [
+            # 几何变换 - 对医学图像安全
+            SubPolicy(0.5, "rotate", 5, 0.5, "shearX", 3, fillcolor),
+            SubPolicy(0.5, "shearY", 3, 0.5, "translateX", 4, fillcolor),
+            SubPolicy(0.5, "translateY", 4, 0.5, "rotate", 4, fillcolor),
+            SubPolicy(0.5, "shearX", 4, 0.5, "shearY", 4, fillcolor),
+            SubPolicy(0.5, "rotate", 6, 0.5, "translateX", 3, fillcolor),
+
+            # 轻度颜色/对比度调整 - 模拟不同成像条件
+            SubPolicy(0.5, "contrast", 3, 0.5, "brightness", 3, fillcolor),
+            SubPolicy(0.5, "sharpness", 4, 0.5, "contrast", 3, fillcolor),
+            SubPolicy(0.5, "brightness", 3, 0.5, "sharpness", 3, fillcolor),
+            SubPolicy(0.5, "contrast", 4, 0.5, "sharpness", 4, fillcolor),
+
+            # 直方图均衡化 - 对医学图像通常安全
+            SubPolicy(0.5, "equalize", 5, 0.5, "autocontrast", 5, fillcolor),
+            SubPolicy(0.5, "autocontrast", 4, 0.5, "rotate", 4, fillcolor),
+            SubPolicy(0.5, "equalize", 4, 0.5, "shearX", 3, fillcolor),
+
+            # 组合变换
+            SubPolicy(0.5, "shearX", 3, 0.5, "contrast", 3, fillcolor),
+            SubPolicy(0.5, "translateX", 3, 0.5, "brightness", 3, fillcolor),
+            SubPolicy(0.5, "rotate", 4, 0.5, "equalize", 4, fillcolor),
+        ]
+
+    def __call__(self, img):
+        policy_idx = random.randint(0, len(self.policies) - 1)
+        return self.policies[policy_idx](img)
+
+    def __repr__(self):
+        return "AutoAugment Medical Image Policy"
+
 class SubPolicy(object):
     def __init__(self, p1, operation1, magnitude_idx1, p2, operation2, magnitude_idx2, fillcolor=(128, 128, 128)):
         ranges = {
@@ -339,7 +374,7 @@ class RandomResizedCrop(object):
         interpolation: Default: PIL.Image.BILINEAR
     """
 
-    def __init__(self, size, scale=(0.08, 1.0), ratio=(3. / 4., 4. / 3.), interpolation=Image.BILINEAR):
+    def __init__(self, size, scale=(0.7, 1.0), ratio=(3. / 4., 4. / 3.), interpolation=Image.BILINEAR):
         self.size = size
         if (scale[0] > scale[1]) or (ratio[0] > ratio[1]):
             warnings.warn("range should be of kind (min, max)")

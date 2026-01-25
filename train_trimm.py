@@ -173,7 +173,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型配置参数
     # ----------------------------------------------------------------------------------------------------------------------------#
-    drop_rate = 0              # Dropout 比率
+    drop_rate = 0.3              # Dropout 比率 (推荐 0.2-0.5，防止过拟合)
     aux_loss_weight = 0.4        # Inception 辅助损失权重
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型断点续练的权值路径
@@ -201,9 +201,9 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
     Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
-    optimizer_type = "adam"         #adam\sgd\adamw
+    optimizer_type = "adamw"        # AdamW 比 Adam 有更好的正则化效果
     momentum = 0.9
-    weight_decay = 1e-3        # 添加权重衰减，防止过拟合
+    weight_decay = 5e-2        # 增加权重衰减，AdamW 推荐 0.01-0.1
     lr_decay_type = "cos"
     save_period = 50           # 更频繁地保存模型
     save_dir = f'models/{backbone}'
@@ -230,7 +230,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
-    use_weighted_sampler = False  # 是否使用加权采样（建议开启，有助于提升少数类别性能）
+    use_weighted_sampler = True  # 启用加权采样，有助于提升少数类别性能
 
     # ------------------------------------------------------#
     #   损失函数配置 (Loss Function Selection)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     #   - 'cb_focal':            类别平衡Focal Loss - 推荐用于类别不平衡 ✅
     #   - 'label_smoothing':     标签平滑交叉熵 - 减少过拟合,提升泛化能力
     # ------------------------------------------------------#
-    loss_type = "focal"  # 默认使用类别平衡Focal Loss
+    loss_type = "label_smoothing"  # 使用标签平滑，减少过拟合
 
     # Focal Loss 参数 (loss_type为'focal'或'cb_focal'时生效)
     focal_alpha = None       # 类别权重,None表示自动计算
@@ -515,13 +515,13 @@ if __name__ == "__main__":
         gen = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                          pin_memory=True,
                          drop_last=False, collate_fn=detection_collate, sampler=train_sampler)
-        gen_val = DataLoader(val_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
+        gen_val = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers,
                              pin_memory=True,
                              drop_last=False, collate_fn=detection_collate, sampler=val_sampler)
 
         # 初始化早停和模型检查点
         early_stopping = EarlyStopping(
-            patience=30,           # 30个epoch没有改善就停止
+            patience=50,           # 50个epoch没有改善就停止
             min_delta=0.001,       # 最小改善阈值
             restore_best_weights=True,
             save_dir=save_dir,

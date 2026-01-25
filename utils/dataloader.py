@@ -5,7 +5,7 @@ import torch.utils.data as data
 from PIL import Image
 
 from .utils import cvtColor, preprocess_input
-from .utils_aug import CenterCrop, ImageNetPolicy, RandomResizedCrop, Resize
+from .utils_aug import CenterCrop, MedicalImagePolicy, RandomResizedCrop, Resize
 
 
 class DataGenerator(data.Dataset):
@@ -18,7 +18,7 @@ class DataGenerator(data.Dataset):
         self.autoaugment_flag   = autoaugment_flag
         if self.autoaugment_flag:
             self.resize_crop = RandomResizedCrop(input_shape)
-            self.policy      = ImageNetPolicy()
+            self.policy      = MedicalImagePolicy()
 
             self.resize      = Resize(input_shape[0] if input_shape[0] == input_shape[1] else input_shape)
             self.center_crop = CenterCrop(input_shape)
@@ -141,13 +141,18 @@ class DataGenerator(data.Dataset):
         #   resize并且随即裁剪
         #------------------------------------------#
         image = self.resize_crop(image)
-        
+
         #------------------------------------------#
-        #   翻转图像
+        #   翻转图像（水平和垂直）
         #------------------------------------------#
-        flip = self.rand()<.5
-        if flip: image = image.transpose(Image.FLIP_LEFT_RIGHT)
-        
+        flip_h = self.rand() < 0.5
+        if flip_h:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
+
+        flip_v = self.rand() < 0.5  # 垂直翻转概率较低
+        if flip_v:
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+
         #------------------------------------------#
         #   随机增强
         #------------------------------------------#
