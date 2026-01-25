@@ -24,7 +24,7 @@ class Classification(object):
     #   xception、inceptionresnetv2、inceptionv3
     #   densenet121、densenet161、densenet169、densenet201
     # --------------------------------------------------------------------#
-    _backbone = 'inception_resnet_v2'
+    _backbone = 'densenet121'
     _defaults = {
         # --------------------------------------------------------------------------#
         #   使用自己训练好的模型进行预测一定要修改model_path和classes_path！
@@ -89,9 +89,24 @@ class Classification(object):
         self.model = timm.create_model(self._backbone, pretrained=False, num_classes=self.num_classes)
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model.load_state_dict(torch.load(self.model_path, map_location=device))
+
+        # 加载checkpoint，支持完整checkpoint格式和纯权重格式
+        checkpoint = torch.load(self.model_path, map_location=device, weights_only=False)
+
+        # 检查是否为完整checkpoint格式（包含model_state_dict键）
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            # 完整checkpoint格式，提取模型权重
+            state_dict = checkpoint['model_state_dict']
+            print('{} model loaded (checkpoint format, epoch={}).'.format(
+                self.model_path, checkpoint.get('epoch', 'N/A')))
+        else:
+            # 纯权重格式
+            state_dict = checkpoint
+            print('{} model loaded (weights format).'.format(self.model_path))
+
+        self.model.load_state_dict(state_dict)
         self.model = self.model.eval()
-        print('{} model, and classes loaded.'.format(self.model_path))
+        print('Classes loaded.')
 
         if self.cuda:
             self.model = nn.DataParallel(self.model)
