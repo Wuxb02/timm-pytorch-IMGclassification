@@ -65,7 +65,7 @@ class LossHistory():
         plt.grid(True)
         plt.xlabel('Epoch')
         plt.ylabel('Acc')
-        plt.legend(loc="upper right")
+        plt.legend(loc="lower right")
 
         plt.savefig(os.path.join(self.log_dir, "epoch_acc.png"))
 
