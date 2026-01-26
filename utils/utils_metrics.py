@@ -244,7 +244,8 @@ def draw_metrics_comparison_chart(recall, precision, f1_scores, class_names, out
 
 def create_classification_report(hist, recall, precision, auc_metrics, specificity,
                                  accuracy, ci_results, class_names, output_path,
-                                 samples_per_class=None, minority_idx=None):
+                                 samples_per_class=None, minority_idx=None,
+                                 top1_acc=None, top5_acc=None):
     """
     生成完整的分类性能报告(合并基础版和高级版)
 
@@ -259,6 +260,8 @@ def create_classification_report(hist, recall, precision, auc_metrics, specifici
         output_path: 输出目录
         samples_per_class: 各类别样本数量(可选)
         minority_idx: 少数类别索引,如果为None则自动识别
+        top1_acc: Top-1准确率(可选)
+        top5_acc: Top-5准确率(可选)
 
     返回:
         f1_scores: F1分数列表
@@ -293,6 +296,52 @@ def create_classification_report(hist, recall, precision, auc_metrics, specifici
         f.write("Image Classification Performance Report\n")
         f.write("=" * 80 + "\n\n")
 
+        # Part 0: Dataset Statistics and Basic Performance Summary
+        if samples_per_class is not None:
+            f.write("0. Dataset Statistics\n")
+            f.write("-" * 80 + "\n\n")
+
+            # 处理列表或字典类型的samples_per_class
+            if isinstance(samples_per_class, list):
+                total_samples = sum(samples_per_class)
+                f.write(f"Total Samples: {total_samples}\n\n")
+                f.write("Class Distribution:\n")
+                for i, name in enumerate(class_names):
+                    count = samples_per_class[i] if i < len(samples_per_class) else 0
+                    ratio = count / total_samples * 100 if total_samples > 0 else 0
+                    minority_marker = " ← Minority Class" if i == minority_idx else ""
+                    f.write(f"  - {name} ({i}): {count} samples ({ratio:.1f}%){minority_marker}\n")
+            else:  # 字典类型
+                total_samples = sum(samples_per_class.values())
+                f.write(f"Total Samples: {total_samples}\n\n")
+                f.write("Class Distribution:\n")
+                for i, name in enumerate(class_names):
+                    count = samples_per_class.get(i, 0)
+                    ratio = count / total_samples * 100 if total_samples > 0 else 0
+                    minority_marker = " ← Minority Class" if i == minority_idx else ""
+                    f.write(f"  - {name} ({i}): {count} samples ({ratio:.1f}%){minority_marker}\n")
+            f.write("\n")
+
+        # Basic Performance Summary
+        f.write("Basic Performance Summary\n")
+        f.write("-" * 80 + "\n\n")
+
+        if top1_acc is not None:
+            f.write(f"Top-1 Accuracy:       {top1_acc*100:.2f}%\n")
+        if top5_acc is not None:
+            f.write(f"Top-5 Accuracy:       {top5_acc*100:.2f}%\n")
+
+        f.write(f"Mean Recall:          {np.mean(recall)*100:.2f}%\n")
+        f.write(f"Mean Precision:       {np.mean(precision)*100:.2f}%\n")
+
+        # 计算Macro F1
+        macro_f1 = np.mean(f1_scores)
+        f.write(f"Macro F1 Score:       {macro_f1*100:.2f}%\n")
+
+        # 平衡准确率
+        balanced_accuracy = np.mean(recall)
+        f.write(f"Balanced Accuracy:    {balanced_accuracy*100:.2f}%\n\n")
+
         # Part I: Detailed per-class metrics with confidence intervals
         f.write("I. Detailed Per-Class Metrics (with 95% CI)\n")
         f.write("-" * 80 + "\n\n")
@@ -314,6 +363,9 @@ def create_classification_report(hist, recall, precision, auc_metrics, specifici
             f.write(f"   F1 Score:         {f1_scores[i]:.4f} "
                    f"(95% CI: [{ci_results['f1'][i]['lower']:.4f}, "
                    f"{ci_results['f1'][i]['upper']:.4f}])\n")
+            f.write(f"   AUC:              {auc_metrics['per_class_auc'][i]:.4f} "
+                   f"(95% CI: [{ci_results['auc'][i]['lower']:.4f}, "
+                   f"{ci_results['auc'][i]['upper']:.4f}])\n")
             f.write("\n")
 
         # Part II: Overall performance metrics
@@ -341,7 +393,34 @@ def create_classification_report(hist, recall, precision, auc_metrics, specifici
                f"{ci_results['macro_specificity']['upper']:.4f}])\n")
         f.write(f"   F1 Score:     {np.mean(f1_scores):.4f} "
                f"(95% CI: [{ci_results['macro_f1']['lower']:.4f}, "
-               f"{ci_results['macro_f1']['upper']:.4f}])\n\n")
+               f"{ci_results['macro_f1']['upper']:.4f}])\n")
+        f.write(f"   AUC:          {auc_metrics['macro_auc']:.4f} "
+               f"(95% CI: [{ci_results['macro_auc']['lower']:.4f}, "
+               f"{ci_results['macro_auc']['upper']:.4f}])\n\n")
+
+        # Micro-average AUC
+        f.write(f"Micro-average:\n")
+
+        # 在多分类中，Micro-average的Precision、Recall、F1都等于Overall Accuracy
+        micro_precision = ci_results['overall_accuracy']['mean']
+        micro_recall = ci_results['overall_accuracy']['mean']
+        micro_f1 = ci_results['overall_accuracy']['mean']
+
+        f.write(f"   Precision:    {micro_precision:.4f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
+               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
+        f.write(f"   Recall:       {micro_recall:.4f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
+               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
+        f.write(f"   F1 Score:     {micro_f1:.4f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
+               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
+        f.write(f"   AUC:          {auc_metrics['micro_auc']:.4f} "
+               f"(95% CI: [{ci_results['micro_auc']['lower']:.4f}, "
+               f"{ci_results['micro_auc']['upper']:.4f}])\n\n")
+
+        f.write("Note: In multi-class classification, Micro-average Precision, Recall, and F1 "
+               "are mathematically equivalent to Overall Accuracy.\n\n")
 
         # Balanced Accuracy and Performance Gap
         f.write(f"Balanced Accuracy:    {np.mean(recall):.4f}\n")
@@ -354,9 +433,31 @@ def create_classification_report(hist, recall, precision, auc_metrics, specifici
         minority_class_idx = minority_idx
         minority_f1 = f1_scores[minority_class_idx]
         minority_recall = recall[minority_class_idx]
+        minority_precision = precision[minority_class_idx]
         minority_auc = auc_metrics['per_class_auc'][minority_class_idx]
+        minority_specificity = specificity[minority_class_idx]
 
-        f.write(f"Minority Class ({class_names[minority_class_idx]}) Performance:\n")
+        f.write(f"Minority Class ({class_names[minority_class_idx]}) Performance:\n\n")
+
+        # 详细指标及置信区间
+        f.write(f"   Precision:    {minority_precision:.4f} "
+               f"(95% CI: [{ci_results['precision'][minority_class_idx]['lower']:.4f}, "
+               f"{ci_results['precision'][minority_class_idx]['upper']:.4f}])\n")
+        f.write(f"   Recall:       {minority_recall:.4f} "
+               f"(95% CI: [{ci_results['recall'][minority_class_idx]['lower']:.4f}, "
+               f"{ci_results['recall'][minority_class_idx]['upper']:.4f}])\n")
+        f.write(f"   F1 Score:     {minority_f1:.4f} "
+               f"(95% CI: [{ci_results['f1'][minority_class_idx]['lower']:.4f}, "
+               f"{ci_results['f1'][minority_class_idx]['upper']:.4f}])\n")
+        f.write(f"   AUC:          {minority_auc:.4f} "
+               f"(95% CI: [{ci_results['auc'][minority_class_idx]['lower']:.4f}, "
+               f"{ci_results['auc'][minority_class_idx]['upper']:.4f}])\n")
+        f.write(f"   Specificity:  {minority_specificity:.4f} "
+               f"(95% CI: [{ci_results['specificity'][minority_class_idx]['lower']:.4f}, "
+               f"{ci_results['specificity'][minority_class_idx]['upper']:.4f}])\n\n")
+
+        # 性能评估
+        f.write("Performance Assessment:\n")
         f.write(f"   F1 Score:  {minority_f1:.4f} - ")
         if minority_f1 > 0.7:
             f.write("Excellent\n")

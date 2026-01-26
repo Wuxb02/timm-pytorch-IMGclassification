@@ -312,7 +312,8 @@ if __name__ == "__main__":
     f1_scores = create_classification_report(
         hist, Recall, Precision, auc_metrics, specificity,
         accuracy, ci_results, class_names, metrics_out_path,
-        samples_per_class=samples_per_class, minority_idx=minority_idx
+        samples_per_class=samples_per_class, minority_idx=minority_idx,
+        top1_acc=top1, top5_acc=top5
     )
 
     # 最终总结
