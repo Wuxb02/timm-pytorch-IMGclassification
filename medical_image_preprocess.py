@@ -478,7 +478,7 @@ def batch_process_dataset(
 
 if __name__ == "__main__":
     # 批量处理数据集
-    input_root = r'E:\timm-pytorch-IMGclassification\datasets'
+    input_root = r'datasets'
 
     print("=" * 60)
     print("批量处理超声图像数据集")
