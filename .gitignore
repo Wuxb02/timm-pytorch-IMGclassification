@@ -48,6 +48,7 @@ datasets/**/*.bmp
 datasets/**/*.gif
 datasets/**/*.txt
 datasets/**/*.xlsx
+datasets*/
 
 # 保留 .gitkeep 文件以维持空目录
 !datasets/**/.gitkeep
