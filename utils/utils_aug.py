@@ -98,6 +98,55 @@ class Invert(object):
         return ImageOps.invert(x)
 
 
+class GaussianNoise(object):
+    """
+    添加高斯噪声，模拟超声设备的电子噪声和散斑噪声
+
+    Args:
+        x: PIL Image对象
+        magnitude: 噪声标准差 (0-25)
+
+    Returns:
+        添加噪声后的PIL Image对象
+    """
+    def __call__(self, x, magnitude):
+        if magnitude == 0:
+            return x
+
+        # 转换为numpy数组
+        img_array = np.array(x).astype(np.float32)
+
+        # 生成高斯噪声
+        noise = np.random.normal(0, magnitude, img_array.shape)
+
+        # 添加噪声并裁剪到有效范围
+        noisy_img = img_array + noise
+        noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
+
+        # 转回PIL图像
+        return Image.fromarray(noisy_img)
+
+
+class GaussianBlur(object):
+    """
+    应用高斯模糊，模拟对焦不准、低频探头或运动模糊
+
+    Args:
+        x: PIL Image对象
+        magnitude: 模糊半径 (0-3.0)
+
+    Returns:
+        模糊后的PIL Image对象
+    """
+    def __call__(self, x, magnitude):
+        if magnitude == 0:
+            return x
+
+        # 使用PIL的GaussianBlur
+        from PIL import ImageFilter
+        return x.filter(ImageFilter.GaussianBlur(radius=magnitude))
+
+
 class ImageNetPolicy(object):
     """ Randomly choose one of the best 24 Sub-policies on ImageNet.
         Example:
@@ -175,6 +224,17 @@ class MedicalImagePolicy(object):
             SubPolicy(0.5, "shearX", 3, 0.5, "contrast", 3, fillcolor),
             SubPolicy(0.5, "translateX", 3, 0.5, "brightness", 3, fillcolor),
             SubPolicy(0.5, "rotate", 4, 0.5, "equalize", 4, fillcolor),
+
+            # 噪声相关策略 - 模拟设备噪声
+            SubPolicy(0.5, "gaussianNoise", 3, 0.5, "brightness", 3, fillcolor),
+            SubPolicy(0.5, "gaussianNoise", 4, 0.5, "contrast", 3, fillcolor),
+
+            # 模糊相关策略 - 模拟成像条件
+            SubPolicy(0.5, "gaussianBlur", 3, 0.5, "sharpness", 4, fillcolor),
+            SubPolicy(0.5, "gaussianBlur", 4, 0.5, "equalize", 4, fillcolor),
+
+            # 组合策略 - 模拟真实复杂场景
+            SubPolicy(0.5, "gaussianNoise", 3, 0.5, "gaussianBlur", 2, fillcolor),
         ]
 
     def __call__(self, img):
@@ -200,7 +260,9 @@ class SubPolicy(object):
             "brightness": np.linspace(0.0, 0.9, 10),
             "autocontrast": [0] * 10,
             "equalize": [0] * 10,
-            "invert": [0] * 10
+            "invert": [0] * 10,
+            "gaussianNoise": np.linspace(0, 25, 10),      # 噪声标准差: 0-25
+            "gaussianBlur": np.linspace(0, 3.0, 10),      # 模糊半径: 0-3.0
         }
 
         func = {
@@ -217,7 +279,9 @@ class SubPolicy(object):
             "brightness": Brightness(),
             "autocontrast": AutoContrast(),
             "equalize": Equalize(),
-            "invert": Invert()
+            "invert": Invert(),
+            "gaussianNoise": GaussianNoise(),
+            "gaussianBlur": GaussianBlur(),
         }
 
         self.p1 = p1
