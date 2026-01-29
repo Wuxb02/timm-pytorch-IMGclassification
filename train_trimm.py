@@ -244,7 +244,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型配置参数
     # ----------------------------------------------------------------------------------------------------------------------------#
-    drop_rate = 0.3              # Dropout 比率 (推荐 0.2-0.5，防止过拟合)
+    drop_rate = 0.1              # Dropout 比率 (推荐 0.2-0.5，防止过拟合)
     aux_loss_weight = 0.4        # Inception 辅助损失权重
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型断点续练的权值路径
@@ -256,22 +256,23 @@ if __name__ == "__main__":
     #   输入的图片大小
     # ----------------------------------------------------#
     input_shape = data_config['input_size'][1:]
+    # input_shape = [299,299]
     # ------------------------------------------------------#
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   优化后的训练阶段参数 - 针对类别不平衡问题调整
     # ----------------------------------------------------------------------------------------------------------------------------#
     Init_Epoch = 0
     Freeze_Epoch = 30          # 增加冻结轮数，稳定特征提取器训练
-    Freeze_batch_size = 128      # 降低batch size，增加更新频率
+    Freeze_batch_size = 64      # 降低batch size，增加更新频率
     UnFreeze_Epoch = 200       # 适中训练轮数，配合早停机制
-    Unfreeze_batch_size = 64    # 更小的batch size，有利于类别2的学习
+    Unfreeze_batch_size = 32    # 更小的batch size，有利于类别2的学习
     Freeze_Train = True
 
     # ------------------------------------------------------------------#
     #   优化后的训练参数 - 适合小样本不平衡分类任务
     # ------------------------------------------------------------------#
-    Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
-    Min_lr = Init_lr * 0.01    # 提高最小学习率，保持持续学习
+    Init_lr = 1e-3            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
+    Min_lr = 1e-4    # 提高最小学习率，保持持续学习
     optimizer_type = "adamw"        # AdamW 比 Adam 有更好的正则化效果
     momentum = 0.9
     weight_decay = 5e-2        # 增加权重衰减，AdamW 推荐 0.01-0.1
@@ -284,8 +285,8 @@ if __name__ == "__main__":
     #   解冻阶段学习率配置 - 防止解冻后过拟合
     #   使用较低的固定学习率，避免破坏预训练特征
     # ------------------------------------------------------------------#
-    Unfreeze_Init_lr = 1e-5    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
-    Unfreeze_Min_lr = 1e-7     # 解冻阶段最小学习率
+    Unfreeze_Init_lr = 1e-4    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
+    Unfreeze_Min_lr = 1e-6     # 解冻阶段最小学习率
 
     # ------------------------------------------------------#
     #   学习率范围配置（根据模型类型自动选择）
@@ -293,22 +294,22 @@ if __name__ == "__main__":
     LR_CONFIG = {
         'default': {
             'nbs': 64,
-            'adam': {'lr_max': 1e-3, 'lr_min': 1e-4},
-            'adamw': {'lr_max': 1e-3, 'lr_min': 1e-4},
-            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-4},
+            'adam': {'lr_max': 1e-2, 'lr_min': 1e-4},
+            'adamw': {'lr_max': 1e-2, 'lr_min': 1e-4},
+            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-3},
         },
         'transformer': {  # ViT, Swin 等 Transformer 模型
             'nbs': 256,
-            'adam': {'lr_max': 1e-3, 'lr_min': 1e-5},
-            'adamw': {'lr_max': 1e-3, 'lr_min': 1e-5},
-            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-4},
+            'adam': {'lr_max': 1e-2, 'lr_min': 1e-4},
+            'adamw': {'lr_max': 1e-2, 'lr_min': 1e-4},
+            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-3},
         },
     }
     
     # ------------------------------------------------------#
     #   数据不平衡处理配置
     # ------------------------------------------------------#
-    use_weighted_sampler = True  # 启用加权采样，有助于提升少数类别性能
+    use_weighted_sampler = False  # 启用加权采样，有助于提升少数类别性能
 
     # ------------------------------------------------------#
     #   损失函数配置 (Loss Function Selection)
@@ -319,7 +320,7 @@ if __name__ == "__main__":
     #   - 'cb_focal':            类别平衡Focal Loss - 推荐用于类别不平衡 ✅
     #   - 'label_smoothing':     标签平滑交叉熵 - 减少过拟合,提升泛化能力
     # ------------------------------------------------------#
-    loss_type = "label_smoothing"  # 使用标签平滑，减少过拟合
+    loss_type = "ce"  # 使用标签平滑，减少过拟合
 
     # Focal Loss 参数 (loss_type为'focal'或'cb_focal'时生效)
     focal_alpha = None       # 类别权重,None表示自动计算
@@ -335,7 +336,7 @@ if __name__ == "__main__":
     #   数据集路径
     # ------------------------------------------------------#
     train_annotation_path = "cls_train.txt"
-    test_annotation_path = 'cls_val.txt'
+    test_annotation_path = 'cls_test.txt'
 
     # ------------------------------------------------------#
     #   设置用到的显卡
@@ -365,7 +366,7 @@ if __name__ == "__main__":
     #   注意: backbone变量需要是timm支持的名称
     #   timm.create_model 会自动处理ViT等模型的输入尺寸参数，代码更简洁
     if 'ception' in backbone.lower():  # 处理Inception的辅助分类头
-        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=drop_rate, aux_logits=False)
+        model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=drop_rate)
     else:
         model = timm.create_model(backbone, pretrained=pretrained, num_classes=num_classes, drop_rate=drop_rate)
     # 备注：对于ViT等模型，如果需要指定非标准的图片大小，可以传入 img_size 参数
