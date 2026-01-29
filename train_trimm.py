@@ -285,7 +285,7 @@ if __name__ == "__main__":
     #   解冻阶段学习率配置 - 防止解冻后过拟合
     #   使用较低的固定学习率，避免破坏预训练特征
     # ------------------------------------------------------------------#
-    Unfreeze_Init_lr = 1e-4    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
+    Unfreeze_Init_lr = 5e-5    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
     Unfreeze_Min_lr = 1e-6     # 解冻阶段最小学习率
 
     # ------------------------------------------------------#
@@ -629,7 +629,9 @@ if __name__ == "__main__":
                 Min_lr_fit = Unfreeze_Min_lr
 
                 remaining_epochs = UnFreeze_Epoch - epoch
-                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs)
+                # 解冻阶段使用更长的warmup (5个epoch，约占总轮次的3%)
+                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs,
+                                                     warmup_iters_ratio=0.03)
 
                 # ------------------------------------#
                 #   !!! 核心修改：使用新的解冻函数 !!!
