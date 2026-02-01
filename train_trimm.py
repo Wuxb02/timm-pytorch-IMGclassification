@@ -14,11 +14,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-# from nets import get_model_from_name # <- 不再需要
 from utils.callbacks import LossHistory
 from utils.dataloader import DataGenerator, detection_collate
-from utils.utils import (download_weights, get_classes, get_lr_scheduler,
-                         set_optimizer_lr, show_config, weights_init,
+from utils.utils import (get_classes, get_lr_scheduler,
+                         show_config, weights_init,
                          count_samples_per_class, identify_minority_class)
 from utils.utils_fit import fit_one_epoch
 from utils.early_stopping import EarlyStopping, ModelCheckpoint
@@ -553,10 +552,17 @@ if __name__ == "__main__":
             'sgd': optim.SGD(model_train.parameters(), Init_lr_fit, momentum=momentum, nesterov=True)
         }[optimizer_type]
 
-        lr_scheduler_func = get_lr_scheduler(
-            lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch,
-            warmup_iters_ratio=Freeze_warmup_ratio,
-            no_aug_iter_ratio=no_aug_iter_ratio
+        # 计算最小学习率比例
+        min_lr_ratio_freeze = Min_lr_fit / Init_lr_fit
+
+        # 创建PyTorch官方scheduler
+        lr_scheduler = get_lr_scheduler(
+            optimizer=optimizer,
+            lr_decay_type=lr_decay_type,
+            total_epochs=Freeze_Epoch,
+            warmup_ratio=Freeze_warmup_ratio,
+            no_aug_ratio=no_aug_iter_ratio,
+            min_lr_ratio=min_lr_ratio_freeze
         )
 
         epoch_step = num_train // batch_size
@@ -627,11 +633,17 @@ if __name__ == "__main__":
                 Min_lr_fit = Unfreeze_Min_lr
 
                 remaining_epochs = UnFreeze_Epoch - epoch
-                # 解冻阶段使用配置的warmup比例
-                lr_scheduler_func = get_lr_scheduler(
-                    lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs,
-                    warmup_iters_ratio=Unfreeze_warmup_ratio,
-                    no_aug_iter_ratio=no_aug_iter_ratio
+                # 计算最小学习率比例
+                min_lr_ratio_unfreeze = Min_lr_fit / Init_lr_fit
+
+                # 重新创建PyTorch官方scheduler
+                lr_scheduler = get_lr_scheduler(
+                    optimizer=optimizer,
+                    lr_decay_type=lr_decay_type,
+                    total_epochs=remaining_epochs,
+                    warmup_ratio=Unfreeze_warmup_ratio,
+                    no_aug_ratio=no_aug_iter_ratio,
+                    min_lr_ratio=min_lr_ratio_unfreeze
                 )
 
                 # ------------------------------------#
@@ -672,8 +684,6 @@ if __name__ == "__main__":
             if distributed:
                 train_sampler.set_epoch(epoch)
 
-            set_optimizer_lr(optimizer, lr_scheduler_func, epoch)
-
             should_stop = fit_one_epoch(
                 model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
                 gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
@@ -682,7 +692,10 @@ if __name__ == "__main__":
                 samples_per_class=samples_per_class, minority_idx=minority_idx,
                 criterion=criterion, aux_loss_weight=aux_loss_weight
             )
-            
+
+            # 更新学习率(三阶段全自动,无需手动处理)
+            lr_scheduler.step()
+
             # 检查是否应该早停
             if should_stop:
                 print(f"训练在第 {epoch + 1} 轮早停！")

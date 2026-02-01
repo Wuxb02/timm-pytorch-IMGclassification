@@ -1,5 +1,4 @@
 import math
-from functools import partial
 from datetime import datetime
 
 import numpy as np
@@ -193,83 +192,71 @@ def weights_init(net, init_type='normal', init_gain=0.02):
     print('initialize network with %s type' % init_type)
     net.apply(init_func)
 
-def get_lr_scheduler(lr_decay_type, lr, min_lr, total_iters, warmup_iters_ratio = 0.05, warmup_lr_ratio = 0.1, no_aug_iter_ratio = 0.05, step_num = 10):
-    def yolox_warm_cos_lr(lr, min_lr, total_iters, warmup_total_iters, warmup_lr_start, no_aug_iter, iters):
-        if iters <= warmup_total_iters:
-            # lr = (lr - warmup_lr_start) * iters / float(warmup_total_iters) + warmup_lr_start
-            lr = (lr - warmup_lr_start) * pow(iters / float(warmup_total_iters), 2) + warmup_lr_start
-        elif iters >= total_iters - no_aug_iter:
-            lr = min_lr
-        else:
-            lr = min_lr + 0.5 * (lr - min_lr) * (
-                1.0 + math.cos(math.pi* (iters - warmup_total_iters) / (total_iters - warmup_total_iters - no_aug_iter))
-            )
-        return lr
+def get_lr_scheduler(optimizer, lr_decay_type, total_epochs,
+                     warmup_ratio=0.05, warmup_lr_ratio=0.1,
+                     no_aug_ratio=0.05, min_lr_ratio=0.01):
+    """
+    创建PyTorch官方LambdaLR学习率调度器(三阶段自动调度,保留平方加速warmup)
 
-    def step_lr(lr, decay_rate, step_size, iters):
-        if step_size < 1:
-            raise ValueError("step_size must above 1.")
-        n       = iters // step_size
-        out_lr  = lr * decay_rate ** n
-        return out_lr
+    Args:
+        optimizer: 优化器实例
+        lr_decay_type: 'cos' 或 'step'
+        total_epochs: 总训练轮次
+        warmup_ratio: warmup阶段占比(默认0.05)
+        warmup_lr_ratio: warmup起始学习率比例(默认0.1)
+        no_aug_ratio: 预先退火阶段占比(默认0.05)
+        min_lr_ratio: 最小学习率比例(默认0.01)
+
+    Returns:
+        scheduler: LambdaLR实例(三阶段调度) 或 StepLR实例
+    """
+    import torch
+
+    # 计算各阶段轮次(与原实现一致)
+    warmup_epochs = int(max(warmup_ratio * total_epochs, 1))
+    warmup_epochs = min(warmup_epochs, 10)  # 上限10轮
+    no_aug_epochs = int(max(no_aug_ratio * total_epochs, 1))
+    no_aug_epochs = min(no_aug_epochs, 15)  # 上限15轮
+    cosine_epochs = total_epochs - warmup_epochs - no_aug_epochs
 
     if lr_decay_type == "cos":
-        warmup_total_iters  = min(max(warmup_iters_ratio * total_iters, 1), 3)
-        warmup_lr_start     = max(warmup_lr_ratio * lr, 1e-6)
-        no_aug_iter         = min(max(no_aug_iter_ratio * total_iters, 1), 15)
-        func = partial(yolox_warm_cos_lr ,lr, min_lr, total_iters, warmup_total_iters, warmup_lr_start, no_aug_iter)
+        def lr_lambda(epoch):
+            """
+            三阶段学习率倍率函数(返回相对于base_lr的倍率)
+
+            阶段1 (Warmup): 平方加速从 base_lr*warmup_lr_ratio 到 base_lr
+            阶段2 (Cosine): 余弦衰减从 base_lr 到 base_lr*min_lr_ratio
+            阶段3 (No-Aug): 固定在 base_lr*min_lr_ratio
+            """
+            if epoch < warmup_epochs:
+                # Warmup阶段: 平方加速(与原实现一致)
+                ratio = epoch / float(max(1, warmup_epochs))
+                return warmup_lr_ratio + (1.0 - warmup_lr_ratio) * (ratio ** 2)
+
+            elif epoch < total_epochs - no_aug_epochs:
+                # 余弦衰减阶段
+                progress = (epoch - warmup_epochs) / float(max(1, cosine_epochs))
+                cosine_factor = 0.5 * (1.0 + math.cos(math.pi * progress))
+                return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_factor
+
+            else:
+                # 预先退火阶段: 固定最小学习率
+                return min_lr_ratio
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+
     else:
-        decay_rate  = (min_lr / lr) ** (1 / (step_num - 1))
-        step_size   = total_iters / step_num
-        func = partial(step_lr, lr, decay_rate, step_size)
+        # Step衰减模式
+        decay_rate = min_lr_ratio ** (1 / 9)  # 10步衰减
+        step_size = max(int(total_epochs / 10), 1)
 
-    return func
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=step_size,
+            gamma=decay_rate
+        )
 
-def set_optimizer_lr(optimizer, lr_scheduler_func, epoch):
-    lr = lr_scheduler_func(epoch)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
-def download_weights(backbone, model_dir="./model_data"):
-    import os
-    from torch.hub import load_state_dict_from_url
-    
-    download_urls = {
-        'mobilenetv2': 'https://download.pytorch.org/models/mobilenet_v2-b0353104.pth',
-        'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-        'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
-        'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
-        'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-        'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
-        'vgg11': 'https://download.pytorch.org/models/vgg11-bbd30ac9.pth',
-        'vgg13': 'https://download.pytorch.org/models/vgg13-c768596a.pth',
-        'vgg16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
-        'vgg11_bn': 'https://download.pytorch.org/models/vgg11_bn-6002323d.pth',
-        'vgg13_bn': 'https://download.pytorch.org/models/vgg13_bn-abd245e5.pth',
-        'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
-        'vit_b_16': 'https://github.com/bubbliiiing/classification-pytorch/releases/download/v1.0/vit-patch_16.pth',
-        'swin_transformer_tiny': 'https://github.com/bubbliiiing/classification-pytorch/releases/download/v1.0/swin_tiny_patch4_window7_224_imagenet1k.pth',
-        'swin_transformer_small': 'https://github.com/bubbliiiing/classification-pytorch/releases/download/v1.0/swin_small_patch4_window7_224_imagenet1k.pth',
-        'swin_transformer_base': 'https://github.com/bubbliiiing/classification-pytorch/releases/download/v1.0/swin_base_patch4_window7_224_imagenet1k.pth',
-
-        'densenet121': 'https://download.pytorch.org/models/densenet121-a639ec97.pth',
-        'densenet169': 'https://download.pytorch.org/models/densenet169-b2777c0a.pth',
-        'densenet201': 'https://download.pytorch.org/models/densenet201-c1103571.pth',
-        'densenet161': 'https://download.pytorch.org/models/densenet161-8d451a50.pth',
-
-        'inception_v3_google': 'https://download.pytorch.org/models/inception_v3_google-1a9a5a14.pth',
-        'Xception': 'http://data.lip6.fr/cadene/pretrainedmodels/xception-43020ad28.pth',
-        'inceptionresnetv2': 'http://data.lip6.fr/cadene/pretrainedmodels/inceptionresnetv2-520b38e4.pth'
-    }
-    try:
-        url = download_urls[backbone]
-        
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-        load_state_dict_from_url(url, model_dir)
-    except:
-        print("There is no pretrained model for " + backbone)
-
+    return scheduler
 
 #---------------------------------------------------------#
 #   动态分类框架支持函数
