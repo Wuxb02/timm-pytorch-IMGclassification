@@ -231,7 +231,7 @@ if __name__ == "__main__":
     #   可以通过 timm.list_models('*inception*') 查看支持的名称
     # ------------------------------------------------------#
     # 推荐模型优先级：对小数据集分类效果更好
-    backbone = "inception_v3"  # 更适合小数据集的模型
+    backbone = "inception_resnet_v2"  # 更适合小数据集的模型
     # 其他备选模型:
     # backbone = "convnext_tiny"     # 现代CNN架构
     # backbone = "swin_small_patch4_window7_224"  # 适中的Transformer
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型配置参数
     # ----------------------------------------------------------------------------------------------------------------------------#
-    drop_rate = 0.4             # Dropout 比率 (推荐 0.2-0.5，防止过拟合)
+    drop_rate = 0.2             # Dropout 比率 (推荐 0.2-0.5，防止过拟合)
     aux_loss_weight = 0.4        # Inception 辅助损失权重
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型断点续练的权值路径
@@ -269,42 +269,34 @@ if __name__ == "__main__":
     Freeze_Train = True
 
     # ------------------------------------------------------------------#
-    #   优化后的训练参数 - 适合小样本不平衡分类任务
+    #   冻结阶段学习率配置
     # ------------------------------------------------------------------#
-    Init_lr = 1e-4            # 降低学习率，避免过拟合(小样本场景建议较小学习率)
-    Min_lr = 1e-5    # 提高最小学习率，保持持续学习
-    optimizer_type = "adamw"        # AdamW 比 Adam 有更好的正则化效果
+    Freeze_Init_lr = 1e-4          # 冻结阶段初始学习率
+    Freeze_Min_lr = 1e-5           # 冻结阶段最小学习率
+    Freeze_warmup_ratio = 0.05     # 冻结阶段warmup比例（占总轮次的5%）
+
+    # ------------------------------------------------------------------#
+    #   解冻阶段学习率配置
+    # ------------------------------------------------------------------#
+    Unfreeze_Init_lr = 5e-5        # 解冻阶段初始学习率（比冻结阶段低一个数量级）
+    Unfreeze_Min_lr = 1e-6         # 解冻阶段最小学习率
+    Unfreeze_warmup_ratio = 0.03   # 解冻阶段warmup比例（占总轮次的3%）
+
+    # ------------------------------------------------------------------#
+    #   预先退火配置
+    # ------------------------------------------------------------------#
+    no_aug_iter_ratio = 0.05       # 预先退火比例（最后5%轮次固定在最小学习率）
+
+    # ------------------------------------------------------------------#
+    #   其他训练参数
+    # ------------------------------------------------------------------#
+    optimizer_type = "adamw"       # AdamW 比 Adam 有更好的正则化效果
     momentum = 0.9
-    weight_decay = 5e-2        # 增加权重衰减，AdamW 推荐 0.01-0.1
-    lr_decay_type = "cos"
-    save_period = 50           # 更频繁地保存模型
+    weight_decay = 5e-2            # 增加权重衰减，AdamW 推荐 0.01-0.1
+    lr_decay_type = "cos"          # 余弦衰减学习率
+    save_period = 50               # 更频繁地保存模型
     save_dir = f'models/{backbone}'
-    num_workers = 2            # 减少并行线程，避免数据加载冲突
-
-    # ------------------------------------------------------------------#
-    #   解冻阶段学习率配置 - 防止解冻后过拟合
-    #   使用较低的固定学习率，避免破坏预训练特征
-    # ------------------------------------------------------------------#
-    Unfreeze_Init_lr = 5e-5    # 解冻阶段初始学习率（比冻结阶段低一个数量级）
-    Unfreeze_Min_lr = 1e-6     # 解冻阶段最小学习率
-
-    # ------------------------------------------------------#
-    #   学习率范围配置（根据模型类型自动选择）
-    # ------------------------------------------------------#
-    LR_CONFIG = {
-        'default': {
-            'nbs': 64,
-            'adam': {'lr_max': 1e-2, 'lr_min': 1e-4},
-            'adamw': {'lr_max': 1e-2, 'lr_min': 1e-4},
-            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-3},
-        },
-        'transformer': {  # ViT, Swin 等 Transformer 模型
-            'nbs': 256,
-            'adam': {'lr_max': 1e-2, 'lr_min': 1e-4},
-            'adamw': {'lr_max': 1e-2, 'lr_min': 1e-4},
-            'sgd': {'lr_max': 1e-1, 'lr_min': 5e-3},
-        },
-    }
+    num_workers = 2                # 减少并行线程，避免数据加载冲突
     
     # ------------------------------------------------------#
     #   数据不平衡处理配置
@@ -514,10 +506,18 @@ if __name__ == "__main__":
             num_classes=num_classes, backbone=backbone, model_path=model_path, input_shape=input_shape, \
             Init_Epoch=Init_Epoch, Freeze_Epoch=Freeze_Epoch, UnFreeze_Epoch=UnFreeze_Epoch,
             Freeze_batch_size=Freeze_batch_size, Unfreeze_batch_size=Unfreeze_batch_size, Freeze_Train=Freeze_Train, \
-            Init_lr=Init_lr, Min_lr=Min_lr, optimizer_type=optimizer_type, momentum=momentum,
+            Init_lr=Freeze_Init_lr, Min_lr=Freeze_Min_lr, optimizer_type=optimizer_type, momentum=momentum,
             lr_decay_type=lr_decay_type, \
             save_period=save_period, save_dir=save_dir, num_workers=num_workers, num_train=num_train, num_val=num_val
         )
+
+        # 显示学习率配置信息
+        print("\n" + "=" * 80)
+        print("学习率配置:")
+        print(f"  冻结阶段: {Freeze_Init_lr:.2e} -> {Freeze_Min_lr:.2e} (Warmup: {Freeze_warmup_ratio*100:.1f}%)")
+        print(f"  解冻阶段: {Unfreeze_Init_lr:.2e} -> {Unfreeze_Min_lr:.2e} (Warmup: {Unfreeze_warmup_ratio*100:.1f}%)")
+        print(f"  预先退火比例: {no_aug_iter_ratio*100:.1f}%")
+        print("=" * 80)
 
     wanted_step = 3e4 if optimizer_type == "sgd" else 1e4
     total_step = num_train // Unfreeze_batch_size * UnFreeze_Epoch
@@ -542,15 +542,9 @@ if __name__ == "__main__":
 
         batch_size = Freeze_batch_size if Freeze_Train else Unfreeze_batch_size
 
-        # 根据模型类型选择学习率配置
-        lr_config_key = 'transformer' if ('vit' in backbone or 'swin' in backbone) else 'default'
-        lr_config = LR_CONFIG[lr_config_key]
-        nbs = lr_config['nbs']
-        lr_limit_max = lr_config[optimizer_type]['lr_max']
-        lr_limit_min = lr_config[optimizer_type]['lr_min']
-
-        Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
-        Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
+        # 直接使用配置的学习率（无需缩放）
+        Init_lr_fit = Freeze_Init_lr
+        Min_lr_fit = Freeze_Min_lr
 
         optimizer = {
             'adam': optim.Adam(model_train.parameters(), Init_lr_fit, betas=(momentum, 0.999),
@@ -559,7 +553,11 @@ if __name__ == "__main__":
             'sgd': optim.SGD(model_train.parameters(), Init_lr_fit, momentum=momentum, nesterov=True)
         }[optimizer_type]
 
-        lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch)
+        lr_scheduler_func = get_lr_scheduler(
+            lr_decay_type, Init_lr_fit, Min_lr_fit, Freeze_Epoch,
+            warmup_iters_ratio=Freeze_warmup_ratio,
+            no_aug_iter_ratio=no_aug_iter_ratio
+        )
 
         epoch_step = num_train // batch_size
         epoch_step_val = num_val // batch_size
@@ -629,9 +627,12 @@ if __name__ == "__main__":
                 Min_lr_fit = Unfreeze_Min_lr
 
                 remaining_epochs = UnFreeze_Epoch - epoch
-                # 解冻阶段使用更长的warmup (5个epoch，约占总轮次的3%)
-                lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs,
-                                                     warmup_iters_ratio=0.03)
+                # 解冻阶段使用配置的warmup比例
+                lr_scheduler_func = get_lr_scheduler(
+                    lr_decay_type, Init_lr_fit, Min_lr_fit, remaining_epochs,
+                    warmup_iters_ratio=Unfreeze_warmup_ratio,
+                    no_aug_iter_ratio=no_aug_iter_ratio
+                )
 
                 # ------------------------------------#
                 #   !!! 核心修改：使用新的解冻函数 !!!
