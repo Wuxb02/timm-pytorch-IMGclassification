@@ -169,8 +169,20 @@ def show_config(**kwargs):
 #   获得学习率
 #---------------------------------------------------#
 def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
+    """
+    获取优化器的学习率
+    - 冻结阶段（单参数组）：返回该学习率
+    - 解冻阶段（多参数组）：返回所有学习率，格式如 "5e-8/5e-7/2.5e-6/5e-6"
+    """
+    param_groups = optimizer.param_groups
+
+    if len(param_groups) == 1:
+        # 冻结阶段：只有一个参数组（分类头）
+        return param_groups[0]['lr']
+    else:
+        # 解冻阶段：多个参数组（分层学习率）
+        lrs = [f"{pg['lr']:.0e}" for pg in param_groups]
+        return "/".join(lrs)
 
 def weights_init(net, init_type='normal', init_gain=0.02):
     def init_func(m):
