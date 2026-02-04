@@ -24,7 +24,7 @@ class Classification(object):
     #   xception、inceptionresnetv2、inceptionv3
     #   densenet121、densenet161、densenet169、densenet201
     # --------------------------------------------------------------------#
-    _backbone = 'densenet121'
+    _backbone = 'inception_resnet_v2'
     _defaults = {
         # --------------------------------------------------------------------------#
         #   使用自己训练好的模型进行预测一定要修改model_path和classes_path！
@@ -36,7 +36,8 @@ class Classification(object):
         # --------------------------------------------------------------------#
         #   输入的图片大小
         # --------------------------------------------------------------------#
-        "input_shape": timm.data.resolve_data_config({}, model=_backbone)['input_size'][1:],
+        # "input_shape": timm.data.resolve_data_config({}, model=_backbone)['input_size'][1:],
+        "input_shape": [299, 299],
         # --------------------------------------------------------------------#
         #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize
         #   否则对图像进行CenterCrop
@@ -79,13 +80,6 @@ class Classification(object):
         # ---------------------------------------------------#
         #   载入模型与权值
         # ---------------------------------------------------#
-        # if self._backbone not in ['vit_b_16', 'swin_transformer_tiny', 'swin_transformer_small',
-        #                          'swin_transformer_base']:
-        #     self.model = get_model_from_name[self._backbone](num_classes=self.num_classes, pretrained=False)
-        # else:
-        #     self.model = get_model_from_name[self._backbone](input_shape=self.input_shape, num_classes=self.num_classes,
-        #                                                     pretrained=False)
-        # trimm
         self.model = timm.create_model(self._backbone, pretrained=False, num_classes=self.num_classes)
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
