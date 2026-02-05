@@ -24,22 +24,29 @@ from utils.early_stopping import EarlyStopping, ModelCheckpoint
 
 
 # ----------------- 新增辅助函数用于冻结/解冻 -----------------
-def freeze_timm_backbone(model):
+import torch
+import torch.nn as nn
+
+def freeze_timm_backbone(model, freeze_bn_stats=True):
     """
     冻结 timm 模型的主干部分，仅保留分类头可训练
-
-    支持多种 timm 模型架构的分类头命名方式
+    
+    Args:
+        model: timm 模型
+        freeze_bn_stats (bool): 是否强制冻结 BN 层的统计量 (Running Mean/Var)。
+                                在 Stage 1 建议设为 True，无论 BatchSize 大小，
+                                以保持特征提取器的稳定性。
     """
-    print("Freezing model backbone...")
+    print(f"Freezing model backbone (Freeze BN Stats: {freeze_bn_stats})...")
 
-    # 第一步：冻结所有参数
+    # 第一步：冻结所有参数权重 (Weights & Biases)
     for param in model.parameters():
         param.requires_grad = False
 
-    # 第二步：解冻分类头（按优先级尝试多种方式）
+    # 第二步：解冻分类头
     classifier_unfrozen = False
-
-    # 方式1：使用 timm 的标准接口 get_classifier()
+    
+    # 使用 timm 的标准接口 get_classifier()
     if hasattr(model, 'get_classifier'):
         try:
             classifier = model.get_classifier()
@@ -50,6 +57,15 @@ def freeze_timm_backbone(model):
                 print("  -> 通过 get_classifier() 解冻分类头")
         except Exception as e:
             print(f"  -> get_classifier() 失败: {e}")
+
+    # 第三步：处理 BN 层 (关键修改)
+    # 如果 freeze_bn_stats 为 True，我们将所有 BN 层设为 eval 模式
+    # 注意：这只是修改了当前的模式。如果在训练循环中调用了 model.train()，这里会被覆盖！
+    if freeze_bn_stats:
+        for module in model.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                module.eval()
+        print("  -> 已将所有 BN 层切换为 Eval 模式 (停止统计更新)")
 
     # 统计可训练参数
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -62,14 +78,24 @@ def freeze_timm_backbone(model):
 
 
 def unfreeze_timm_backbone(model):
-    """解冻 timm 模型的所有参数"""
+    """
+    解冻 timm 模型的所有参数，并允许 BN 更新
+    """
     print("Unfreezing all model parameters...")
+    
+    # 1. 解冻所有权重
     for param in model.parameters():
         param.requires_grad = True
 
+    # 2. 恢复 BN 层的训练模式 (可选，通常由外部 loop 的 model.train() 控制)
+    # 这里显式通过 loop 确保没有残留的 eval 状态
+    for module in model.modules():
+        if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            module.train()
+
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  -> 全部参数已解冻: {trainable_params:,}")
-
+    print("  -> BN 层已恢复 Train 模式 (将开始学习当前数据的统计分布)")
 
 def get_layer_wise_param_groups(model, base_lr, lr_mult_early=0.01,
                                  lr_mult_middle=0.1, lr_mult_late=0.5):
@@ -217,7 +243,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型配置参数
     # ----------------------------------------------------------------------------------------------------------------------------#
-    drop_rate = 0.5             # Dropout 比率 - 抗过拟合优化：提升至0.5
+    drop_rate = 0.3             # Dropout 比率 - 抗过拟合优化：提升至0.5
     aux_loss_weight = 0.4        # Inception 辅助损失权重
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   模型断点续练的权值路径
@@ -251,8 +277,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     #   解冻阶段学习率配置 - 抗过拟合优化
     # ------------------------------------------------------------------#
-    Unfreeze_Init_lr = 5e-6        # 解冻阶段初始学习率（大幅降低，防止过拟合）
-    Unfreeze_Min_lr = 5e-7         # 解冻阶段最小学习率
+    Unfreeze_Init_lr = 1e-6        # 解冻阶段初始学习率（大幅降低，防止过拟合）
+    Unfreeze_Min_lr = 1e-7         # 解冻阶段最小学习率
     Unfreeze_warmup_ratio = 0.03   # 解冻阶段warmup比例（占总轮次的3%）
 
     # ------------------------------------------------------------------#
@@ -285,7 +311,7 @@ if __name__ == "__main__":
     #   - 'cb_focal':            类别平衡Focal Loss - 推荐用于类别不平衡 ✅
     #   - 'label_smoothing':     标签平滑交叉熵 - 减少过拟合,提升泛化能力
     # ------------------------------------------------------#
-    loss_type = "ce"  
+    loss_type = "focal"  
 
     # Focal Loss 参数 (loss_type为'focal'或'cb_focal'时生效)
     focal_alpha = None       # 类别权重,None表示自动计算
