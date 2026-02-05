@@ -181,7 +181,7 @@ def get_lr(optimizer):
         return param_groups[0]['lr']
     else:
         # 解冻阶段：多个参数组（分层学习率）
-        lrs = [f"{pg['lr']:.2e}" for pg in param_groups]
+        lrs = [f"{pg['lr']:.4e}" for pg in param_groups]
         return "/".join(lrs)
 
 def weights_init(net, init_type='normal', init_gain=0.02):

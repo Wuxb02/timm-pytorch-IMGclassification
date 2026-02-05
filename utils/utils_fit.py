@@ -54,6 +54,11 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         print('Start Train')
         pbar = tqdm(total=epoch_step,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
     model_train.train()
+
+    for module in model_train.modules():
+        if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            model_train.eval()
+
     for iteration, batch in enumerate(gen):
         if iteration >= epoch_step: 
             break
