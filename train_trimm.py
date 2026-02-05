@@ -51,32 +51,6 @@ def freeze_timm_backbone(model):
         except Exception as e:
             print(f"  -> get_classifier() 失败: {e}")
 
-    # 方式2：尝试常见的分类头属性名
-    if not classifier_unfrozen:
-        classifier_names = ['head', 'fc', 'classifier', 'last_linear', 'output']
-        for name in classifier_names:
-            if hasattr(model, name):
-                classifier = getattr(model, name)
-                if classifier is not None and hasattr(classifier, 'parameters'):
-                    for param in classifier.parameters():
-                        param.requires_grad = True
-                    classifier_unfrozen = True
-                    print(f"  -> 通过属性 '{name}' 解冻分类头")
-                    break
-
-    # 方式3：解冻最后一个包含参数的模块
-    if not classifier_unfrozen:
-        print("  -> 警告: 未找到标准分类头，尝试解冻最后一层")
-        named_modules = list(model.named_modules())
-        for name, module in reversed(named_modules):
-            params = list(module.parameters(recurse=False))
-            if params:
-                for param in params:
-                    param.requires_grad = True
-                classifier_unfrozen = True
-                print(f"  -> 解冻模块: {name}")
-                break
-
     # 统计可训练参数
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
@@ -277,8 +251,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     #   解冻阶段学习率配置 - 抗过拟合优化
     # ------------------------------------------------------------------#
-    Unfreeze_Init_lr = 1e-5        # 解冻阶段初始学习率（大幅降低，防止过拟合）
-    Unfreeze_Min_lr = 1e-6         # 解冻阶段最小学习率
+    Unfreeze_Init_lr = 5e-6        # 解冻阶段初始学习率（大幅降低，防止过拟合）
+    Unfreeze_Min_lr = 5e-7         # 解冻阶段最小学习率
     Unfreeze_warmup_ratio = 0.03   # 解冻阶段warmup比例（占总轮次的3%）
 
     # ------------------------------------------------------------------#
