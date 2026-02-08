@@ -38,10 +38,13 @@ def get_model_name(name: str) -> str:
         return 'Xception'
     elif 'vgg19' in name:
         return 'VGG19'
-    elif 'densennet121' in name:
+    elif 'densenet121' in name:
         return 'DenseNet121'
-    elif 'inception_v3' in name:
+    elif 'tf_inception_v3' in name or 'inception_v3' in name:
         return 'InceptionV3'
+    else:
+        # 默认返回原始名称（去除后缀）
+        return name.replace('_cls_val', '').replace('_cls_test', '')
     
 
 def load_model_data(folder_path, n_classes):
@@ -329,12 +332,17 @@ def main():
     # ==================== 配置参数 ====================
     # 在这里直接配置需要对比的模型文件夹名称
     folders = [
-        'resnet50_cls_test',
-        'inception_resnet_v2_cls_test'
+        'densenet121_cls_val',
+        'inception_resnet_v2_cls_val',
+        'resnet50_cls_val',
+        'tf_inception_v3_cls_val',
+        'vgg19_bn_cls_val',
+        'xception_cls_val'
+
     ]
 
     # 其他配置参数
-    n_classes = 3   # 类别数量
+    n_classes = 2   # 类别数量
     output_prefix = 'multi_model'  # 输出文件名前缀
     # =================================================
 
