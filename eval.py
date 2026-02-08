@@ -188,10 +188,7 @@ if __name__ == "__main__":
         # 动态生成概率列名
         for class_idx, class_name in enumerate(class_names):
             # 判断是否为纯数字（旧格式cls_classes.txt）
-            if class_name.isdigit():
-                col_name = f'class_{class_idx}_prob'
-            else:
-                col_name = f'{class_name}_probability'
+            col_name = f'class_{class_idx}_prob'
             result_dict[col_name] = pred[class_idx]
 
         detailed_results.append(result_dict)
