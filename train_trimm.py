@@ -170,21 +170,36 @@ def get_layer_wise_param_groups(model, base_lr, lr_mult_early=0.01,
 
 # -------------------------------------------------------------
 
-def create_weighted_sampler(annotation_lines, samples_per_class):
+def create_weighted_sampler(annotation_lines, samples_per_class,
+                            strategy='sqrt'):
     """
     创建加权随机采样器来处理类别不平衡
 
     Args:
         annotation_lines: 标注文件行列表
         samples_per_class: 各类别样本数量列表
+        strategy: 权重计算策略
+            - 'inverse': 纯逆频率（极端不平衡时不推荐）
+            - 'sqrt': 平方根逆频率（推荐，温和补偿）
 
     Returns:
         WeightedRandomSampler: 加权采样器
     """
+    import math
     from torch.utils.data import WeightedRandomSampler
 
     total_samples = sum(samples_per_class)
-    class_weights = [total_samples / count for count in samples_per_class]
+
+    if strategy == 'sqrt':
+        class_weights = [
+            math.sqrt(total_samples / count)
+            for count in samples_per_class
+        ]
+    else:
+        class_weights = [
+            total_samples / count
+            for count in samples_per_class
+        ]
 
     sample_weights = []
     for line in annotation_lines:
@@ -197,12 +212,11 @@ def create_weighted_sampler(annotation_lines, samples_per_class):
         replacement=True
     )
 
-    # 动态计算少数类别信息
-    minority_idx = class_weights.index(max(class_weights))  # 权重最大的是少数类
-    majority_idx = class_weights.index(min(class_weights))  # 权重最小的是多数类
-
-    print(f"创建加权采样器：类别权重 = {[f'{w:.3f}' for w in class_weights]}")
-    print(f"少数类别({minority_idx})被选中的概率提升了 {class_weights[minority_idx]/class_weights[majority_idx]:.1f} 倍")
+    max_weight = max(class_weights)
+    min_weight = min(class_weights)
+    print(f"创建加权采样器 (策略: {strategy})")
+    print(f"  权重范围: {min_weight:.3f} ~ {max_weight:.3f}, "
+          f"最大权重比: {max_weight / min_weight:.1f}:1")
 
     return sampler
 
@@ -230,7 +244,7 @@ if __name__ == "__main__":
     #   可以通过 timm.list_models('*inception*') 查看支持的名称
     # ------------------------------------------------------#
     # 推荐模型优先级：对小数据集分类效果更好
-    backbone = "densenet121"  # 更适合小数据集的模型
+    backbone = "inception_resnet_v2"  # 更适合小数据集的模型
     # 其他备选模型:
     # backbone = "convnext_tiny"     # 现代CNN架构
     # backbone = "swin_small_patch4_window7_224"  # 适中的Transformer
@@ -262,10 +276,13 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------------------------------------------------------------#
     Init_Epoch = 0
     Freeze_Epoch = 20          # 方案一优化：缩短冻结轮数，避免分类头过拟合
-    Freeze_batch_size = 48      # 冻结阶段：大batch size，充分利用显存，加快训练并稳定梯度
+    Freeze_batch_size = 32      # 冻结阶段：大batch size，充分利用显存，加快训练并稳定梯度
     UnFreeze_Epoch = 200       # 适中训练轮数，配合早停机制
-    Unfreeze_batch_size = 32    # 解冻阶段：小batch size，增加梯度噪声，防止过拟合
+    Unfreeze_batch_size = 24    # 解冻阶段：小batch size，增加梯度噪声，防止过拟合
     Freeze_Train = True
+    freeze_bn_in_unfreeze = False  # 解冻阶段是否冻结BN统计量
+                                    # True: BN始终冻结（适合小batch或数据量少）
+                                    # False: 解冻阶段BN也解冻（适合与预训练分布差异大的数据）
 
     # ------------------------------------------------------------------#
     #   冻结阶段学习率配置 - 方案一优化
@@ -311,7 +328,7 @@ if __name__ == "__main__":
     #   - 'cb_focal':            类别平衡Focal Loss - 推荐用于类别不平衡 ✅
     #   - 'label_smoothing':     标签平滑交叉熵 - 减少过拟合,提升泛化能力
     # ------------------------------------------------------#
-    loss_type = "focal"  
+    loss_type = "cb_focal"  
 
     # Focal Loss 参数 (loss_type为'focal'或'cb_focal'时生效)
     focal_alpha = None       # 类别权重,None表示自动计算
@@ -608,13 +625,13 @@ if __name__ == "__main__":
             min_delta=0.001,       # 最小改善阈值
             restore_best_weights=True,
             save_dir=save_dir,
-            metric='minority_score',  # 监控交界性类别复合分数
+            metric='balanced_accuracy',  # 监控平衡准确率（21类场景更稳定）
             mode='max'             # 分数越高越好
         )
         
         model_checkpoint = ModelCheckpoint(
-            filepath=os.path.join(save_dir, 'best_minority_model.pth'),
-            monitor='minority_score',
+            filepath=os.path.join(save_dir, 'best_balanced_acc_model.pth'),
+            monitor='balanced_accuracy',
             mode='max',
             save_best_only=True,
             verbose=1
@@ -684,13 +701,17 @@ if __name__ == "__main__":
             if distributed:
                 train_sampler.set_epoch(epoch)
 
+            # 冻结阶段始终冻结BN；解冻阶段根据配置决定
+            current_freeze_bn = True if (not UnFreeze_flag) else freeze_bn_in_unfreeze
+
             should_stop = fit_one_epoch(
                 model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val,
                 gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir, local_rank,
                 early_stopping=early_stopping, model_checkpoint=model_checkpoint,
                 num_classes=num_classes, class_names=class_names,
                 samples_per_class=samples_per_class, minority_idx=minority_idx,
-                criterion=criterion, aux_loss_weight=aux_loss_weight
+                criterion=criterion, aux_loss_weight=aux_loss_weight,
+                freeze_bn=current_freeze_bn
             )
 
             # 更新学习率(三阶段全自动,无需手动处理)

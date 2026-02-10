@@ -10,7 +10,7 @@ from .focal_loss import FocalLoss, ClassBalancedFocalLoss, get_loss_function
 from .early_stopping import EarlyStopping, ModelCheckpoint, ClassBalancedMetrics
 
 
-def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None, criterion=None, aux_loss_weight=0.4):
+def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0, early_stopping=None, model_checkpoint=None, num_classes=None, class_names=None, samples_per_class=None, minority_idx=None, criterion=None, aux_loss_weight=0.4, freeze_bn=True):
     """
     新增参数:
         num_classes: 类别数量(从train_trimm.py传入)
@@ -55,9 +55,10 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         pbar = tqdm(total=epoch_step,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
     model_train.train()
 
-    for module in model_train.modules():
-        if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
-            model_train.eval()
+    if freeze_bn:
+        for module in model_train.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                module.eval()
 
     for iteration, batch in enumerate(gen):
         if iteration >= epoch_step: 
@@ -226,17 +227,18 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         #-----------------------------------------------#
         current_val_loss = val_loss / epoch_step_val
         minority_score = val_metrics.get_minority_score()
-        
-        # 检查早停
+        balanced_acc = val_detailed.get('balanced_accuracy', 0)
+
+        # 检查早停（使用balanced_accuracy，多类场景更稳定）
         if early_stopping is not None:
-            if early_stopping(minority_score, model, epoch):
+            if early_stopping(balanced_acc, model, epoch):
                 print("早停触发！")
                 return True  # 返回True表示应该停止训练
         
         # 模型检查点(使用动态少数类别索引)
         if model_checkpoint is not None:
             minority_acc_key = f'{class_names[minority_idx]}_acc'
-            model_checkpoint(minority_score, model, optimizer, epoch,
+            model_checkpoint(balanced_acc, model, optimizer, epoch,
                            val_loss=current_val_loss,
                            minority_acc=val_detailed.get(minority_acc_key, 0),
                            balanced_acc=val_detailed.get('balanced_accuracy', 0))
