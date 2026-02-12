@@ -121,9 +121,12 @@ def get_classes(classes_path, old=False):
 #----------------------------------------#
 #   预处理训练图片
 #----------------------------------------#
+_NORM_CACHE = {}
+
+
 def preprocess_input(x, backbone=None):
     """
-    图像归一化预处理
+    图像归一化预处理（带缓存）
 
     Args:
         x: 输入图像数组 (H, W, C)
@@ -136,17 +139,28 @@ def preprocess_input(x, backbone=None):
     """
     x = x / 255.0
 
-    # 动态获取归一化参数
+    # 动态获取归一化参数（带缓存，避免重复查询timm配置）
     if backbone is not None:
-        try:
-            data_config = timm.data.resolve_data_config({}, model=backbone)
-            mean = np.array(data_config.get('mean', [0.485, 0.456, 0.406]))
-            std = np.array(data_config.get('std', [0.229, 0.224, 0.225]))
-        except Exception as e:
-            # 回退到默认参数（兼容性保障）
-            print(f"[Warning] 无法获取模型 {backbone} 的归一化配置，使用默认参数: {e}")
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
+        if backbone not in _NORM_CACHE:
+            try:
+                data_config = timm.data.resolve_data_config(
+                    {}, model=backbone
+                )
+                mean = np.array(
+                    data_config.get('mean', [0.485, 0.456, 0.406])
+                )
+                std = np.array(
+                    data_config.get('std', [0.229, 0.224, 0.225])
+                )
+            except Exception as e:
+                print(
+                    f"[Warning] 无法获取模型 {backbone} "
+                    f"的归一化配置，使用默认参数: {e}"
+                )
+                mean = np.array([0.485, 0.456, 0.406])
+                std = np.array([0.229, 0.224, 0.225])
+            _NORM_CACHE[backbone] = (mean, std)
+        mean, std = _NORM_CACHE[backbone]
     else:
         # 默认ImageNet参数（向后兼容旧代码）
         mean = np.array([0.485, 0.456, 0.406])
