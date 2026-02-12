@@ -235,6 +235,12 @@ if __name__ == "__main__":
     sync_bn = False
     fp16 = True
     # ----------------------------------------------------#
+    #   gpu_id       指定使用的GPU编号
+    #                仅在 distributed = False 时生效
+    #                默认为0，即使用第一块GPU
+    # ----------------------------------------------------#
+    gpu_id = 0
+    # ----------------------------------------------------#
     #   classes_path
     # ----------------------------------------------------#
     classes_path = './model_data/cls_classes.txt'
@@ -359,7 +365,18 @@ if __name__ == "__main__":
             print(f"[{os.getpid()}] (rank = {rank}, local_rank = {local_rank}) training...")
             print("Gpu Device Count : ", ngpus_per_node)
     else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if Cuda:
+            if gpu_id >= ngpus_per_node:
+                raise ValueError(
+                    f"gpu_id={gpu_id} 超出范围，"
+                    f"当前可用GPU数量为 {ngpus_per_node}，"
+                    f"有效范围为 0~{ngpus_per_node - 1}"
+                )
+            torch.cuda.set_device(gpu_id)
+            device = torch.device('cuda', gpu_id)
+            print(f"使用 GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}")
+        else:
+            device = torch.device('cpu')
         local_rank = 0
         rank = 0
 
@@ -479,9 +496,8 @@ if __name__ == "__main__":
             model_train = torch.nn.parallel.DistributedDataParallel(model_train, device_ids=[local_rank],
                                                                     find_unused_parameters=True)
         else:
-            model_train = torch.nn.DataParallel(model)
             cudnn.benchmark = True
-            model_train = model_train.cuda()
+            model_train = model_train.cuda(gpu_id)
 
     with open(train_annotation_path, encoding='utf-8-sig') as f:
         train_lines = f.readlines()
@@ -621,7 +637,7 @@ if __name__ == "__main__":
 
         # 初始化早停和模型检查点
         early_stopping = EarlyStopping(
-            patience=50,           # 50个epoch没有改善就停止
+            patience=200,           # 50个epoch没有改善就停止
             min_delta=0.001,       # 最小改善阈值
             restore_best_weights=True,
             save_dir=save_dir,
