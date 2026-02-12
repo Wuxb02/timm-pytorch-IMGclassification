@@ -66,9 +66,9 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         images, targets = batch
         with torch.no_grad():
             if cuda:
-                images  = images.cuda(local_rank)
-                targets = targets.cuda(local_rank)
-                
+                images  = images.cuda()
+                targets = targets.cuda()
+
         #----------------------#
         #   清零梯度
         #----------------------#
@@ -169,8 +169,8 @@ def fit_one_epoch(model_train, model, loss_history, optimizer, epoch, epoch_step
         images, targets = batch
         with torch.no_grad():
             if cuda:
-                images  = images.cuda(local_rank)
-                targets = targets.cuda(local_rank)
+                images  = images.cuda()
+                targets = targets.cuda()
 
             outputs = model_train(images)
 
