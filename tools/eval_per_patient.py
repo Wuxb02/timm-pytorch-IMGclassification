@@ -180,28 +180,28 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
                 if total_images is not None:
                     f.write(f"Total Images: {total_images}\n")
                 if avg_images_per_patient is not None:
-                    f.write(f"Average Images per Patient: {avg_images_per_patient:.2f}\n")
+                    f.write(f"Average Images per Patient: {avg_images_per_patient:.3f}\n")
                 f.write("\n")
                 f.write("Patient Class Distribution:\n")
                 for i, name in enumerate(class_names):
                     count = samples_per_class[i] if i < len(samples_per_class) else 0
                     ratio = count / total_samples * 100 if total_samples > 0 else 0
                     minority_marker = " ← Minority Class" if i == minority_idx else ""
-                    f.write(f"  - {name} ({i}): {count} patients ({ratio:.1f}%){minority_marker}\n")
+                    f.write(f"  - {name} ({i}): {count} patients ({ratio:.3f}%){minority_marker}\n")
             else:  # 字典类型
                 total_samples = sum(samples_per_class.values())
                 f.write(f"Total Patients: {total_samples}\n")
                 if total_images is not None:
                     f.write(f"Total Images: {total_images}\n")
                 if avg_images_per_patient is not None:
-                    f.write(f"Average Images per Patient: {avg_images_per_patient:.2f}\n")
+                    f.write(f"Average Images per Patient: {avg_images_per_patient:.3f}\n")
                 f.write("\n")
                 f.write("Patient Class Distribution:\n")
                 for i, name in enumerate(class_names):
                     count = samples_per_class.get(i, 0)
                     ratio = count / total_samples * 100 if total_samples > 0 else 0
                     minority_marker = " ← Minority Class" if i == minority_idx else ""
-                    f.write(f"  - {name} ({i}): {count} patients ({ratio:.1f}%){minority_marker}\n")
+                    f.write(f"  - {name} ({i}): {count} patients ({ratio:.3f}%){minority_marker}\n")
             f.write("\n")
 
         # Basic Performance Summary
@@ -210,13 +210,13 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
             f.write("-" * 80 + "\n\n")
 
             if top1_acc is not None:
-                f.write(f"Top-1 Accuracy:       {top1_acc*100:.2f}%\n")
+                f.write(f"Top-1 Accuracy:       {top1_acc*100:.3f}%\n")
             if top5_acc is not None:
-                f.write(f"Top-5 Accuracy:       {top5_acc*100:.2f}%\n")
-            f.write(f"Mean Recall:          {np.mean(recall)*100:.2f}%\n")
-            f.write(f"Mean Precision:       {np.mean(precision)*100:.2f}%\n")
-            f.write(f"Macro F1 Score:       {np.mean(f1_scores)*100:.2f}%\n")
-            f.write(f"Balanced Accuracy:    {np.mean(recall)*100:.2f}%\n")
+                f.write(f"Top-5 Accuracy:       {top5_acc*100:.3f}%\n")
+            f.write(f"Mean Recall:          {np.mean(recall)*100:.3f}%\n")
+            f.write(f"Mean Precision:       {np.mean(precision)*100:.3f}%\n")
+            f.write(f"Macro F1 Score:       {np.mean(f1_scores)*100:.3f}%\n")
+            f.write(f"Balanced Accuracy:    {np.mean(recall)*100:.3f}%\n")
             f.write("\n")
 
         # Part I: Detailed Per-Class Metrics (with 95% CI)
@@ -225,24 +225,24 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
 
         for i, name in enumerate(class_names):
             f.write(f"{i+1}. {name}:\n")
-            f.write(f"   Accuracy:         {accuracy[i]:.4f} "
-                   f"(95% CI: [{ci_results['accuracy'][i]['lower']:.4f}, "
-                   f"{ci_results['accuracy'][i]['upper']:.4f}])\n")
-            f.write(f"   Precision:        {precision[i]:.4f} "
-                   f"(95% CI: [{ci_results['precision'][i]['lower']:.4f}, "
-                   f"{ci_results['precision'][i]['upper']:.4f}])\n")
-            f.write(f"   Recall:           {recall[i]:.4f} "
-                   f"(95% CI: [{ci_results['recall'][i]['lower']:.4f}, "
-                   f"{ci_results['recall'][i]['upper']:.4f}])\n")
-            f.write(f"   Specificity:      {specificity[i]:.4f} "
-                   f"(95% CI: [{ci_results['specificity'][i]['lower']:.4f}, "
-                   f"{ci_results['specificity'][i]['upper']:.4f}])\n")
-            f.write(f"   F1 Score:         {f1_scores[i]:.4f} "
-                   f"(95% CI: [{ci_results['f1'][i]['lower']:.4f}, "
-                   f"{ci_results['f1'][i]['upper']:.4f}])\n")
-            f.write(f"   AUC:              {auc_metrics['per_class_auc'][i]:.4f} "
-                   f"(95% CI: [{ci_results['auc'][i]['lower']:.4f}, "
-                   f"{ci_results['auc'][i]['upper']:.4f}])\n")
+            f.write(f"   Accuracy:         {accuracy[i]:.3f} "
+                   f"(95% CI: [{ci_results['accuracy'][i]['lower']:.3f}, "
+                   f"{ci_results['accuracy'][i]['upper']:.3f}])\n")
+            f.write(f"   Precision:        {precision[i]:.3f} "
+                   f"(95% CI: [{ci_results['precision'][i]['lower']:.3f}, "
+                   f"{ci_results['precision'][i]['upper']:.3f}])\n")
+            f.write(f"   Recall:           {recall[i]:.3f} "
+                   f"(95% CI: [{ci_results['recall'][i]['lower']:.3f}, "
+                   f"{ci_results['recall'][i]['upper']:.3f}])\n")
+            f.write(f"   Specificity:      {specificity[i]:.3f} "
+                   f"(95% CI: [{ci_results['specificity'][i]['lower']:.3f}, "
+                   f"{ci_results['specificity'][i]['upper']:.3f}])\n")
+            f.write(f"   F1 Score:         {f1_scores[i]:.3f} "
+                   f"(95% CI: [{ci_results['f1'][i]['lower']:.3f}, "
+                   f"{ci_results['f1'][i]['upper']:.3f}])\n")
+            f.write(f"   AUC:              {auc_metrics['per_class_auc'][i]:.3f} "
+                   f"(95% CI: [{ci_results['auc'][i]['lower']:.3f}, "
+                   f"{ci_results['auc'][i]['upper']:.3f}])\n")
             f.write("\n")
 
         # Part II: Overall performance metrics
@@ -250,30 +250,30 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
         f.write("-" * 80 + "\n\n")
 
         # Overall Accuracy (all samples)
-        f.write(f"Overall Accuracy:     {ci_results['overall_accuracy']['mean']:.4f} "
-               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
-               f"{ci_results['overall_accuracy']['upper']:.4f}])\n\n")
+        f.write(f"Overall Accuracy:     {ci_results['overall_accuracy']['mean']:.3f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.3f}, "
+               f"{ci_results['overall_accuracy']['upper']:.3f}])\n\n")
 
         # Macro-average (5 core metrics)
         f.write(f"Macro-average:\n")
-        f.write(f"   Accuracy:     {np.mean(accuracy):.4f} "
-               f"(95% CI: [{ci_results['macro_accuracy']['lower']:.4f}, "
-               f"{ci_results['macro_accuracy']['upper']:.4f}])\n")
-        f.write(f"   Precision:    {np.mean(precision):.4f} "
-               f"(95% CI: [{ci_results['macro_precision']['lower']:.4f}, "
-               f"{ci_results['macro_precision']['upper']:.4f}])\n")
-        f.write(f"   Recall:       {np.mean(recall):.4f} "
-               f"(95% CI: [{ci_results['macro_recall']['lower']:.4f}, "
-               f"{ci_results['macro_recall']['upper']:.4f}])\n")
-        f.write(f"   Specificity:  {np.mean(specificity):.4f} "
-               f"(95% CI: [{ci_results['macro_specificity']['lower']:.4f}, "
-               f"{ci_results['macro_specificity']['upper']:.4f}])\n")
-        f.write(f"   F1 Score:     {np.mean(f1_scores):.4f} "
-               f"(95% CI: [{ci_results['macro_f1']['lower']:.4f}, "
-               f"{ci_results['macro_f1']['upper']:.4f}])\n")
-        f.write(f"   AUC:          {auc_metrics['macro_auc']:.4f} "
-               f"(95% CI: [{ci_results['macro_auc']['lower']:.4f}, "
-               f"{ci_results['macro_auc']['upper']:.4f}])\n\n")
+        f.write(f"   Accuracy:     {np.mean(accuracy):.3f} "
+               f"(95% CI: [{ci_results['macro_accuracy']['lower']:.3f}, "
+               f"{ci_results['macro_accuracy']['upper']:.3f}])\n")
+        f.write(f"   Precision:    {np.mean(precision):.3f} "
+               f"(95% CI: [{ci_results['macro_precision']['lower']:.3f}, "
+               f"{ci_results['macro_precision']['upper']:.3f}])\n")
+        f.write(f"   Recall:       {np.mean(recall):.3f} "
+               f"(95% CI: [{ci_results['macro_recall']['lower']:.3f}, "
+               f"{ci_results['macro_recall']['upper']:.3f}])\n")
+        f.write(f"   Specificity:  {np.mean(specificity):.3f} "
+               f"(95% CI: [{ci_results['macro_specificity']['lower']:.3f}, "
+               f"{ci_results['macro_specificity']['upper']:.3f}])\n")
+        f.write(f"   F1 Score:     {np.mean(f1_scores):.3f} "
+               f"(95% CI: [{ci_results['macro_f1']['lower']:.3f}, "
+               f"{ci_results['macro_f1']['upper']:.3f}])\n")
+        f.write(f"   AUC:          {auc_metrics['macro_auc']:.3f} "
+               f"(95% CI: [{ci_results['macro_auc']['lower']:.3f}, "
+               f"{ci_results['macro_auc']['upper']:.3f}])\n\n")
 
         # Micro-average AUC
         f.write(f"Micro-average:\n")
@@ -283,25 +283,25 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
         micro_recall = ci_results['overall_accuracy']['mean']
         micro_f1 = ci_results['overall_accuracy']['mean']
 
-        f.write(f"   Precision:    {micro_precision:.4f} "
-               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
-               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
-        f.write(f"   Recall:       {micro_recall:.4f} "
-               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
-               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
-        f.write(f"   F1 Score:     {micro_f1:.4f} "
-               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.4f}, "
-               f"{ci_results['overall_accuracy']['upper']:.4f}])\n")
-        f.write(f"   AUC:          {auc_metrics['micro_auc']:.4f} "
-               f"(95% CI: [{ci_results['micro_auc']['lower']:.4f}, "
-               f"{ci_results['micro_auc']['upper']:.4f}])\n\n")
+        f.write(f"   Precision:    {micro_precision:.3f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.3f}, "
+               f"{ci_results['overall_accuracy']['upper']:.3f}])\n")
+        f.write(f"   Recall:       {micro_recall:.3f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.3f}, "
+               f"{ci_results['overall_accuracy']['upper']:.3f}])\n")
+        f.write(f"   F1 Score:     {micro_f1:.3f} "
+               f"(95% CI: [{ci_results['overall_accuracy']['lower']:.3f}, "
+               f"{ci_results['overall_accuracy']['upper']:.3f}])\n")
+        f.write(f"   AUC:          {auc_metrics['micro_auc']:.3f} "
+               f"(95% CI: [{ci_results['micro_auc']['lower']:.3f}, "
+               f"{ci_results['micro_auc']['upper']:.3f}])\n\n")
 
         f.write("Note: In multi-class classification, Micro-average Precision, Recall, and F1 "
                "are mathematically equivalent to Overall Accuracy.\n\n")
 
         # Balanced Accuracy and Performance Gap
-        f.write(f"Balanced Accuracy:    {np.mean(recall):.4f}\n")
-        f.write(f"Performance Gap (F1): {max(f1_scores) - min(f1_scores):.4f}\n\n")
+        f.write(f"Balanced Accuracy:    {np.mean(recall):.3f}\n")
+        f.write(f"Performance Gap (F1): {max(f1_scores) - min(f1_scores):.3f}\n\n")
 
         # Part III: Key findings and performance analysis
         f.write("III. Key Findings and Analysis\n")
@@ -317,21 +317,21 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
         f.write(f"Minority Class ({class_names[minority_class_idx]}) Performance:\n\n")
 
         # 详细指标及置信区间
-        f.write(f"   Precision:    {minority_precision:.4f} "
-               f"(95% CI: [{ci_results['precision'][minority_class_idx]['lower']:.4f}, "
-               f"{ci_results['precision'][minority_class_idx]['upper']:.4f}])\n")
-        f.write(f"   Recall:       {minority_recall:.4f} "
-               f"(95% CI: [{ci_results['recall'][minority_class_idx]['lower']:.4f}, "
-               f"{ci_results['recall'][minority_class_idx]['upper']:.4f}])\n")
-        f.write(f"   F1 Score:     {minority_f1:.4f} "
-               f"(95% CI: [{ci_results['f1'][minority_class_idx]['lower']:.4f}, "
-               f"{ci_results['f1'][minority_class_idx]['upper']:.4f}])\n")
-        f.write(f"   AUC:          {minority_auc:.4f} "
-               f"(95% CI: [{ci_results['auc'][minority_class_idx]['lower']:.4f}, "
-               f"{ci_results['auc'][minority_class_idx]['upper']:.4f}])\n")
-        f.write(f"   Specificity:  {minority_specificity:.4f} "
-               f"(95% CI: [{ci_results['specificity'][minority_class_idx]['lower']:.4f}, "
-               f"{ci_results['specificity'][minority_class_idx]['upper']:.4f}])\n\n")
+        f.write(f"   Precision:    {minority_precision:.3f} "
+               f"(95% CI: [{ci_results['precision'][minority_class_idx]['lower']:.3f}, "
+               f"{ci_results['precision'][minority_class_idx]['upper']:.3f}])\n")
+        f.write(f"   Recall:       {minority_recall:.3f} "
+               f"(95% CI: [{ci_results['recall'][minority_class_idx]['lower']:.3f}, "
+               f"{ci_results['recall'][minority_class_idx]['upper']:.3f}])\n")
+        f.write(f"   F1 Score:     {minority_f1:.3f} "
+               f"(95% CI: [{ci_results['f1'][minority_class_idx]['lower']:.3f}, "
+               f"{ci_results['f1'][minority_class_idx]['upper']:.3f}])\n")
+        f.write(f"   AUC:          {minority_auc:.3f} "
+               f"(95% CI: [{ci_results['auc'][minority_class_idx]['lower']:.3f}, "
+               f"{ci_results['auc'][minority_class_idx]['upper']:.3f}])\n")
+        f.write(f"   Specificity:  {minority_specificity:.3f} "
+               f"(95% CI: [{ci_results['specificity'][minority_class_idx]['lower']:.3f}, "
+               f"{ci_results['specificity'][minority_class_idx]['upper']:.3f}])\n\n")
 
         # Performance Assessment
         f.write("Performance Assessment:\n")
@@ -345,7 +345,7 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
             f1_assessment = "Moderate"
         else:
             f1_assessment = "Poor"
-        f.write(f"   F1 Score:  {minority_f1:.4f} - {f1_assessment}\n")
+        f.write(f"   F1 Score:  {minority_f1:.3f} - {f1_assessment}\n")
 
         # Recall评估
         if minority_recall >= 0.9:
@@ -356,7 +356,7 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
             recall_assessment = "Moderate false negative risk"
         else:
             recall_assessment = "High false negative risk"
-        f.write(f"   Recall:    {minority_recall:.4f} - {recall_assessment}\n")
+        f.write(f"   Recall:    {minority_recall:.3f} - {recall_assessment}\n")
 
         # AUC评估
         if minority_auc >= 0.9:
@@ -367,7 +367,7 @@ def create_patient_classification_report(hist, recall, precision, auc_metrics,
             auc_assessment = "Acceptable discrimination"
         else:
             auc_assessment = "Poor discrimination"
-        f.write(f"   AUC:       {minority_auc:.4f} - {auc_assessment}\n\n")
+        f.write(f"   AUC:       {minority_auc:.3f} - {auc_assessment}\n\n")
 
         # Deployment Recommendations
         f.write("Deployment Recommendations:\n")
@@ -437,7 +437,7 @@ def evaluate_patient_level(metrics_folder: str):
     avg_images_per_patient = total_images / num_patients
 
     print(f"患者总数: {num_patients}")
-    print(f"每患者平均图片数: {avg_images_per_patient:.2f}")
+    print(f"每患者平均图片数: {avg_images_per_patient:.3f}")
 
     # 4. 准备数据
     labels = patient_df['true'].values
@@ -508,17 +508,17 @@ def evaluate_patient_level(metrics_folder: str):
     print(f"\n患者级别统计:")
     print(f"  患者总数: {num_patients}")
     print(f"  图像总数: {total_images}")
-    print(f"  每患者平均图片数: {avg_images_per_patient:.2f}")
+    print(f"  每患者平均图片数: {avg_images_per_patient:.3f}")
     print(f"\n性能指标:")
-    print(f"  Top-1 准确率: {top1_acc*100:.2f}%")
-    print(f"  平均召回率: {np.mean(recall)*100:.2f}%")
-    print(f"  平均精确度: {np.mean(precision)*100:.2f}%")
-    print(f"  Macro F1: {np.mean(f1_scores)*100:.2f}%")
-    print(f"  Macro AUC: {auc_metrics['macro_auc']:.4f}")
+    print(f"  Top-1 准确率: {top1_acc*100:.3f}%")
+    print(f"  平均召回率: {np.mean(recall)*100:.3f}%")
+    print(f"  平均精确度: {np.mean(precision)*100:.3f}%")
+    print(f"  Macro F1: {np.mean(f1_scores)*100:.3f}%")
+    print(f"  Macro AUC: {auc_metrics['macro_auc']:.3f}")
     print(f"\n少数类别 ({class_names[minority_idx]}) 性能:")
-    print(f"  F1分数: {f1_scores[minority_idx]:.4f}")
-    print(f"  召回率: {recall[minority_idx]:.4f}")
-    print(f"  AUC: {auc_metrics['per_class_auc'][minority_idx]:.4f}")
+    print(f"  F1分数: {f1_scores[minority_idx]:.3f}")
+    print(f"  召回率: {recall[minority_idx]:.3f}")
+    print(f"  AUC: {auc_metrics['per_class_auc'][minority_idx]:.3f}")
 
 
 def main():
