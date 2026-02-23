@@ -254,7 +254,6 @@ def draw_multi_model_roc(model_data_list: list, output_path: str):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Patient-Level Multi-Model ROC Curves')
 
     # 图例设置
     plt.legend(loc="lower right",
@@ -328,7 +327,6 @@ def draw_multi_model_pr(model_data_list: list, output_path: str):
     plt.ylim([0.0, 1.05])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title('Patient-Level Multi-Model PR Curves')
 
     # 图例设置
     plt.legend(loc="lower left",
