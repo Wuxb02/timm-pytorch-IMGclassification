@@ -3,7 +3,7 @@
 
 功能：
 1. 读取多个模型文件夹的detailed_predictions.csv
-2. 将图像级别预测聚合为患者级别（使用最大值策略）
+2. 将图像级别预测聚合为患者级别（使用平均值策略）
 3. 计算每个模型的患者级别整体AUC/AP（使用宏平均）
 4. 绘制多模型对比的患者级别ROC和PR曲线
 
@@ -13,8 +13,12 @@
 示例:
     python tools/plot_patient_roc_pr.py
 
+注意：
+    本脚本使用mean聚合策略（平均概率），与eval_per_patient.py保持一致，
+    因此生成的AUC值将与classification_patient_report.txt中的值完全相同。
+
 作者：Claude Code
-日期：2026-02-23
+日期：2026-02-24
 """
 
 import os
@@ -113,8 +117,9 @@ def aggregate_patient_predictions(df: pd.DataFrame, num_classes: int) -> tuple:
         image_counts: 每个患者的图片数量字典
 
     聚合方式：
-        - 对每个患者的所有图片概率取最大值（max aggregation）
-        - 基于最大概率确定预测标签
+        - 对每个患者的所有图片概率取平均值（mean aggregation）
+        - 基于平均概率确定预测标签
+        - 与eval_per_patient.py保持一致
     """
     # 提取患者标识
     df['patient_name'] = df['path'].apply(extract_patient_name)
@@ -131,10 +136,10 @@ def aggregate_patient_predictions(df: pd.DataFrame, num_classes: int) -> tuple:
     # 聚合逻辑
     agg_dict = {'true': lambda x: Counter(x).most_common(1)[0][0]}  # 使用众数
 
-    # 动态添加概率列的聚合方式（取最大值）
+    # 动态添加概率列的聚合方式（取平均值，与eval_per_patient.py保持一致）
     prob_cols = [col for col in df.columns if col.startswith('class_') and col.endswith('_prob')]
     for col in prob_cols:
-        agg_dict[col] = 'max'  # 关键修改：使用max而非mean
+        agg_dict[col] = 'mean'  # 使用mean与eval_per_patient.py保持一致
 
     # 按患者分组并聚合
     patient_df = df.groupby('patient_name').agg(agg_dict).reset_index()
@@ -203,6 +208,8 @@ def draw_multi_model_roc(model_data_list: list, output_path: str):
         model_data_list: 模型数据列表，每个元素为 (labels, probs, model_name, macro_auc)
         output_path: 输出文件路径
     """
+    from sklearn.metrics import roc_auc_score
+
     plt.figure(figsize=(8, 6), dpi=300)
     plt.rcParams.update({
         'font.size': 16,
@@ -217,7 +224,7 @@ def draw_multi_model_roc(model_data_list: list, output_path: str):
     max_name_len = max([len(data[2]) for data in model_data_list])
 
     # 绘制每个模型的ROC曲线
-    for (labels, probs, model_name, macro_auc), color in zip(model_data_list, colors):
+    for (labels, probs, model_name, _), color in zip(model_data_list, colors):
         n_classes = probs.shape[1]
 
         # One-hot编码标签
@@ -225,7 +232,7 @@ def draw_multi_model_roc(model_data_list: list, output_path: str):
         if labels_onehot.shape[1] == 1:
             labels_onehot = np.hstack([1 - labels_onehot, labels_onehot])
 
-        # 计算Macro-average ROC
+        # 计算Macro-average ROC曲线（用于绘图）
         all_fpr = np.unique(np.concatenate([
             roc_curve(labels_onehot[:, i], probs[:, i])[0]
             for i in range(n_classes)
@@ -238,8 +245,9 @@ def draw_multi_model_roc(model_data_list: list, output_path: str):
 
         mean_tpr /= n_classes
 
-        # 计算Macro AUC
-        macro_auc_value = auc(all_fpr, mean_tpr)
+        # 使用sklearn的标准方法计算Macro AUC（与eval_per_patient.py一致）
+        macro_auc_value = roc_auc_score(labels_onehot, probs,
+                                        average='macro', multi_class='ovr')
 
         # 构造对齐的图例标签
         label_str = f"{model_name:<{max_name_len}}   AUC = {macro_auc_value:.3f}"
@@ -398,22 +406,16 @@ def main():
                 folder_path, n_classes
             )
 
-            # 计算Macro AUC/AP（用于图例显示）
+            # 计算Macro AUC/AP（用于显示，使用sklearn标准方法）
+            from sklearn.metrics import roc_auc_score
+
             labels_onehot = label_binarize(labels, classes=range(n_classes))
             if labels_onehot.shape[1] == 1:
                 labels_onehot = np.hstack([1 - labels_onehot, labels_onehot])
 
-            # 计算Macro AUC
-            all_fpr = np.unique(np.concatenate([
-                roc_curve(labels_onehot[:, i], probs[:, i])[0]
-                for i in range(n_classes)
-            ]))
-            mean_tpr = np.zeros_like(all_fpr)
-            for i in range(n_classes):
-                fpr, tpr, _ = roc_curve(labels_onehot[:, i], probs[:, i])
-                mean_tpr += np.interp(all_fpr, fpr, tpr)
-            mean_tpr /= n_classes
-            macro_auc = auc(all_fpr, mean_tpr)
+            # 使用sklearn标准方法计算Macro AUC（与eval_per_patient.py一致）
+            macro_auc = roc_auc_score(labels_onehot, probs,
+                                      average='macro', multi_class='ovr')
 
             # 计算Macro AP
             macro_ap = np.mean([
